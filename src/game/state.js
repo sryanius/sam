@@ -229,6 +229,17 @@ export function factionOfficers(st, fid) {
 export function rulerOf(st, fid) {
   return st.factions[fid] ? officerState(st, st.factions[fid].ruler) : null;
 }
+
+/**
+ * 살아 있는 세력의 군주인가.
+ * 군주는 사로잡아도 등용할 수 없다 — 목을 베거나 놓아주는 수밖에 없다.
+ * 다만 그 세력이 무너지면 군주가 아니게 되므로 그때는 거둘 수 있다.
+ */
+export function isRulerOf(st, s) {
+  if (!s || s.faction === NEUTRAL) return false;
+  const f = st.factions[s.faction];
+  return !!f && f.alive && f.ruler === s.id;
+}
 export const isPlayer = (st, fid) => fid === st.player;
 
 /** 세력 총합 국력 — 순위·AI 판단·승리 판정에 쓴다 */

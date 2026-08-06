@@ -12,7 +12,7 @@ import { clamp, num, iga, eul } from '../core/util.js';
 import { rng } from '../core/rng.js';
 import {
   base, NEUTRAL, officerState, membersIn, freeIn, captivesIn, factionCities,
-  factionOfficers, power, isAllied,
+  factionOfficers, power, isAllied, isRulerOf,
 } from './state.js';
 import { caps, info, troopCap, goldIncome, conscriptMax } from './city.js';
 import { eff, overall } from './officer.js';
@@ -45,7 +45,15 @@ export function runFactionAI(st, fid) {
       if (p.captiveOf !== fid) continue;
       const o = base(p);
       const persuader = membersIn(st, c.id, fid).find((s) => !s.acted);
-      if (overall(o) >= 62 && rng.chance(0.75)) {
+      if (isRulerOf(st, p)) {
+        // 적 군주는 거둘 수 없다 — 베거나 놓아준다
+        if (rng.chance(0.55)) {
+          captiveAction(st, c.id, p.id, '참수');
+          news.push(`${iga(f.name)} ${st.factions[p.faction]?.name ?? ''} 군주 ${eul(o.name)} 참했다.`);
+        } else {
+          captiveAction(st, c.id, p.id, '석방');
+        }
+      } else if (overall(o) >= 62 && rng.chance(0.75)) {
         const r = captiveAction(st, c.id, p.id, '등용', persuader?.id);
         if (r.success) news.push(`${iga(f.name)} ${eul(o.name)} 거두었다.`);
       } else if (o.duty >= 12 && rng.chance(0.5)) {

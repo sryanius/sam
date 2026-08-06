@@ -6,7 +6,7 @@ import { SCENARIOS } from '../data/scenarios.js';
 import { num, comma, dateLabel, eun, euro } from '../core/util.js';
 import { rng } from '../core/rng.js';
 import {
-  newGame, base, NEUTRAL, factionCities, factionOfficers, officerState,
+  newGame, base, NEUTRAL, factionCities, factionOfficers, officerState, isRulerOf,
   saveLocal, loadLocal, saveSlots, deleteSlot, serialize, deserialize, power,
 } from '../game/state.js';
 import { beginMonth, endMonth, rankings } from '../game/turn.js';
@@ -278,20 +278,20 @@ export class Game {
 
   async captiveDialog(p) {
     const o = base(p);
+    const ruler = isRulerOf(this.st, p);
     const body = el('div', { class: 'row', style: { gap: '14px' } },
       portrait(o, 80),
       el('div', {},
-        el('div', { style: { fontSize: '1.2rem', fontWeight: '700' } }, o.name),
+        el('div', { style: { fontSize: '1.2rem', fontWeight: '700' } }, o.name,
+          ruler ? el('span', { style: { marginLeft: '8px', color: 'var(--seal)', fontSize: '.86rem' } }, '君') : null),
         el('div', { class: 'muted' }, `육지 ${o.lead}  무력 ${o.war}  지력 ${o.int}  정치 ${o.pol}`),
-        el('div', { class: 'muted' }, `야망 ${o.amb}  의리 ${o.duty}`)));
-    const act = await showModal({
-      title: `포로 ${o.name}`, body,
-      buttons: [
-        { label: '참수', value: '참수' },
-        { label: '석방', value: '석방' },
-        { label: '등용', value: '등용', primary: true },
-      ],
-    });
+        el('div', { class: 'muted' }, `야망 ${o.amb}  의리 ${o.duty}`),
+        // 군주는 거둘 수 없다 — 목을 베거나 놓아주는 수밖에
+        ruler ? el('div', { style: { marginTop: '6px', fontSize: '.84rem' } },
+          `${this.st.factions[p.faction].name}의 주인이다. 무릎 꿇릴 수는 없다.`) : null));
+    const buttons = [{ label: '참수', value: '참수' }, { label: '석방', value: '석방' }];
+    if (!ruler) buttons.push({ label: '등용', value: '등용', primary: true });
+    const act = await showModal({ title: `포로 ${o.name}`, body, buttons });
     const { captiveAction } = await import('../game/commands.js');
     const cityId = p.city;
     if (act === '등용') {

@@ -9,7 +9,7 @@ import { TREASURE_BY_ID, TREASURES } from '../data/treasures.js';
 import { clamp, num, eul, eun, iga, gwa, euro } from '../core/util.js';
 import { rng } from '../core/rng.js';
 import {
-  base, NEUTRAL, officerState, membersIn, factionCities, factionOfficers, isAllied,
+  base, NEUTRAL, officerState, membersIn, factionCities, factionOfficers, isAllied, isRulerOf,
 } from './state.js';
 import {
   caps, devGain, patrolGain, trainGain, conscriptMax, conscriptCost, troopCap, info,
@@ -265,6 +265,8 @@ export function captiveAction(st, cityId, captiveId, action, persuaderId) {
     return ok(`${eul(name)} 놓아주었다.`);
   }
   if (action === '등용') {
+    // 군주는 무릎 꿇지 않는다
+    if (isRulerOf(st, t)) return no(`${eun(name)} 한 세력의 주인이다. 거둘 수 없다`);
     const p = persuaderId !== undefined ? officerState(st, persuaderId) : null;
     const ch = recruitChance(st, fid, p, t);
     if (!rng.pct(ch)) return ok(`${eun(name)} 고개를 젓는다. (성공률 ${ch}%)`, { chance: ch, success: false });

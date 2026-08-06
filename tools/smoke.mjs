@@ -6,7 +6,8 @@ import { OFFICERS, OFFICER_BY_NAME } from '../src/data/officers.js';
 import { HOMETOWN, HOME_OF } from '../src/data/hometowns.js';
 import { SCENARIOS } from '../src/data/scenarios.js';
 import { TREASURES } from '../src/data/treasures.js';
-import { newGame, factionCities, factionOfficers, NEUTRAL, base } from '../src/game/state.js';
+import { newGame, factionCities, factionOfficers, NEUTRAL, base, isRulerOf } from '../src/game/state.js';
+import { captiveAction } from '../src/game/commands.js';
 import { endMonth, beginMonth, rankings } from '../src/game/turn.js';
 import { startBattle, resolveBattle } from '../src/game/battle/engine.js';
 import { autoResolve } from '../src/game/battle/ai.js';
@@ -152,6 +153,32 @@ section('전투 자동 판정');
   ok(battles >= 12, `전투를 충분히 못 돌렸다 (${battles}건)`);
   ok(taken > 0 && taken < battles, `함락 결과가 한쪽으로만 쏠렸다 (${taken}/${battles})`);
   console.log(`  전투 ${battles}건, 함락 ${taken}건, 평균 ${(days / Math.max(1, battles)).toFixed(1)}일, 일기토 ${duels}회`);
+}
+
+section('군주 포로 처분');
+{
+  const st = newGame('200', 0, 555);
+  const foeFid = st.factions.findIndex((f) => f.alive && f.id !== st.player);
+  const ruler = st.officers.find((s) => s.id === st.factions[foeFid].ruler);
+  const myCity = st.cities.find((c) => c.faction === st.player);
+  ruler.status = 'captive';
+  ruler.captiveOf = st.player;
+  ruler.city = myCity.id;
+
+  ok(isRulerOf(st, ruler), '군주 판정이 안 된다');
+  const r1 = captiveAction(st, myCity.id, ruler.id, '등용');
+  ok(!r1.ok, '군주를 등용할 수 있어서는 안 된다');
+  ok(ruler.faction === foeFid && ruler.status === 'captive', '실패한 등용이 상태를 건드렸다');
+
+  // 세력이 무너지면 더는 군주가 아니다 — 그때는 거둘 수 있다
+  for (const c of st.cities) if (c.faction === foeFid) c.faction = NEUTRAL;
+  endMonth(st);
+  ok(!st.factions[foeFid].alive, '도시를 다 잃었는데 세력이 남아 있다');
+  ok(ruler.faction === NEUTRAL, '멸망한 세력의 포로가 재야가 되지 않았다');
+  ok(!isRulerOf(st, ruler), '멸망한 세력의 군주가 아직 군주로 잡힌다');
+  const r2 = captiveAction(st, ruler.city, ruler.id, '등용');
+  ok(r2.ok, '멸망 후에는 등용을 시도할 수 있어야 한다');
+  console.log(`  ${base(ruler).name} — 세력 생존 중 등용 거부, 멸망 후 시도 가능`);
 }
 
 section('24개월 진행');

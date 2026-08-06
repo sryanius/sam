@@ -5,7 +5,7 @@ import { OFFICERS } from '../data/officers.js';
 import { TREASURE_BY_ID } from '../data/treasures.js';
 import { num, comma, grade, clamp, affinityGap } from '../core/util.js';
 import {
-  base, NEUTRAL, officerState, membersIn, freeIn, captivesIn, factionCities, isAllied,
+  base, NEUTRAL, officerState, membersIn, freeIn, captivesIn, factionCities, isAllied, isRulerOf,
 } from '../game/state.js';
 import { caps, info, goldIncome, harvest, foodUpkeep, troopCap, conscriptMax, conscriptCost } from '../game/city.js';
 import { eff, recruitChance, overall, isHermit } from '../game/officer.js';
@@ -17,14 +17,17 @@ import { eul, eun, gwa } from '../core/util.js';
 
 /* ═══════════════════════════ 사이드 패널 ═══════════════════════════ */
 
+/** 성 정보 / 무장 탭. 도시를 바꿔도 보던 탭을 유지한다. */
+let sideTab = 'city';
+
 export function renderSide(st, cityId, ctx) {
+  renderCommandBar(st, cityId, ctx);
+
   const host = clear($('#side-content'));
   if (cityId < 0) { host.append(el('p', { class: 'muted' }, '도시를 고르시오.')); return; }
 
   const ci = CITIES[cityId];
   const c = st.cities[cityId];
-  const k = caps(c);
-  const mine = c.faction === st.player;
   const f = c.faction === NEUTRAL ? null : st.factions[c.faction];
 
   host.append(el('div', { class: 'panel-h' },
@@ -32,6 +35,24 @@ export function renderSide(st, cityId, ctx) {
     el('span', { class: 'owner' },
       f ? el('span', { class: 'badge', style: { background: f.color } }) : null, ' ', f ? f.name : '공백지'),
   ));
+
+  const pane = el('div');
+  const tabs = el('div', { class: 'tabs side-tabs' });
+  const tab = (label, id) => tabs.append(el('button', {
+    class: 'btn' + (sideTab === id ? ' on' : ''),
+    onClick: () => { sideTab = id; renderSide(st, cityId, ctx); },
+  }, label));
+  tab('성 정보', 'city');
+  tab(`무장 ${membersIn(st, cityId, c.faction).length}`, 'officers');
+  host.append(tabs, pane);
+
+  if (sideTab === 'officers') officerPane(st, cityId, pane, ctx);
+  else cityPane(st, cityId, pane, ctx);
+}
+
+function cityPane(st, cityId, host, ctx) {
+  const c = st.cities[cityId];
+  const k = caps(c);
 
   const kv = el('div', { class: 'kv' });
   const row = (kk, v, extra) => { kv.append(el('span', { class: 'k' }, kk), el('span', { class: 'v' }, v), el('span', {}, extra || '')); };
@@ -44,25 +65,38 @@ export function renderSide(st, cityId, ctx) {
   row('인구', num(c.pop), '');
   host.append(kv);
 
-  const meters = el('div');
   for (const [label, cur, cap] of [
     ['토지', c.land, k.land], ['치수', c.flood, k.flood], ['상업', c.comm, k.comm],
     ['기술', c.tech, k.tech], ['성벽', c.wall, k.wall],
   ]) {
-    meters.append(el('div', { style: { margin: '5px 0' } },
-      el('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: '.78rem' } },
+    host.append(el('div', { class: 'meter' },
+      el('div', { class: 'meter-h' },
         el('span', { class: 'k' }, label),
         el('span', { class: 'v' }, `${cur} / ${cap}`)),
       bar(cur, cap, 1.01, 0.2)));
   }
-  host.append(meters);
 
-  // 무장
+  // 남의 성이면 외교 상태를 덧붙인다
+  if (c.faction !== st.player && c.faction !== NEUTRAL && st.factions[st.player]) {
+    const rel = st.factions[st.player].relation[c.faction] ?? 0;
+    const ally = isAllied(st, st.player, c.faction);
+    const truce = st.factions[st.player].truce[c.faction];
+    host.append(el('p', { class: 'muted', style: { fontSize: '.8rem', marginTop: '10px' } },
+      `우호 ${rel}${ally ? ' · 동맹' : ''}${truce ? ` · 화친 ${truce}개월` : ''}`));
+  }
+}
+
+function officerPane(st, cityId, host, ctx) {
+  const c = st.cities[cityId];
+  const mine = c.faction === st.player;
+
   const here = membersIn(st, cityId, c.faction);
-  host.append(el('div', { class: 'sec' }, `무장 ${here.length}`));
   if (!here.length) host.append(el('p', { class: 'muted', style: { fontSize: '.82rem' } }, '지키는 자가 없다.'));
-  for (const s of here.sort((a, b) => overall(base(b)) - overall(base(a)))) {
-    host.append(officerRow(st, s, c, ctx));
+  else {
+    host.append(el('div', { class: 'sec' }, `소속 ${here.length}`));
+    for (const s of here.sort((a, b) => overall(base(b)) - overall(base(a)))) {
+      host.append(officerRow(st, s, c, ctx));
+    }
   }
 
   const free = freeIn(st, cityId).filter((s) => s.found || mine);
@@ -70,44 +104,44 @@ export function renderSide(st, cityId, ctx) {
     host.append(el('div', { class: 'sec' }, `재야 ${free.length}`));
     for (const s of free) host.append(officerRow(st, s, c, ctx, true));
   }
-  const caps_ = captivesIn(st, cityId);
-  if (caps_.length) {
-    host.append(el('div', { class: 'sec' }, `포로 ${caps_.length}`));
-    for (const s of caps_) host.append(officerRow(st, s, c, ctx, true));
+  const captives = captivesIn(st, cityId);
+  if (captives.length) {
+    host.append(el('div', { class: 'sec' }, `포로 ${captives.length}`));
+    for (const s of captives) host.append(officerRow(st, s, c, ctx, true));
   }
+  host.append(el('p', { class: 'muted', style: { fontSize: '.74rem', marginTop: '8px' } },
+    '이름을 누르면 상세와 처분이 나온다.'));
+}
 
-  if (!mine) {
-    if (f && st.factions[st.player]) {
-      const rel = st.factions[st.player].relation[c.faction] ?? 0;
-      const ally = isAllied(st, st.player, c.faction);
-      const truce = st.factions[st.player].truce[c.faction];
-      host.append(el('p', { class: 'muted', style: { fontSize: '.8rem', marginTop: '10px' } },
-        `우호 ${rel}${ally ? ' · 동맹' : ''}${truce ? ` · 화친 ${truce}개월` : ''}`));
-    }
-    // 아군 도시에서 칠 수 있는지
-    const froms = ADJ[cityId].map((e) => st.cities[e.to]).filter((x) => x.faction === st.player);
-    if (froms.length) {
-      host.append(el('div', { class: 'sec' }, '군사'));
-      host.append(el('button', { class: 'btn wide', onClick: () => marchDialog(st, cityId, ctx) }, '출진 — 이 성을 친다'));
-    }
+/* ─────────────────── 왼쪽 명령 세로바 ─────────────────── */
+
+function renderCommandBar(st, cityId, ctx) {
+  const bar_ = clear($('#cmdbar'));
+  if (cityId < 0) return;
+  const c = st.cities[cityId];
+  const mine = c.faction === st.player;
+
+  const add = (label, fn, cls = 'btn') => bar_.append(el('button', { class: cls, onClick: fn }, label));
+
+  if (mine) {
+    bar_.append(el('div', { class: 'cmd-head' }, '명령'));
+    add('내정', () => devDialog(st, cityId, ctx));
+    add('군사', () => militaryDialog(st, cityId, ctx));
+    add('인사', () => personnelDialog(st, cityId, ctx));
+    add('계략', () => plotDialog(st, cityId, ctx));
+    add('외교', () => diplomacyDialog(st, cityId, ctx));
+    add('상인', () => merchantDialog(st, cityId, ctx));
+    bar_.append(el('div', { class: 'cmd-gap' }));
+    add('출진', () => marchTargetDialog(st, cityId, ctx), 'btn primary');
     return;
   }
 
-  // 커맨드
-  host.append(el('div', { class: 'sec' }, '명령'));
-  const grid = el('div', { class: 'cmd-grid' });
-  const cmd = (label, fn) => grid.append(el('button', { class: 'btn', onClick: fn }, label));
-  cmd('내정', () => devDialog(st, cityId, ctx));
-  cmd('군사', () => militaryDialog(st, cityId, ctx));
-  cmd('인사', () => personnelDialog(st, cityId, ctx));
-  cmd('계략', () => plotDialog(st, cityId, ctx));
-  cmd('외교', () => diplomacyDialog(st, cityId, ctx));
-  cmd('상인', () => merchantDialog(st, cityId, ctx));
-  host.append(grid);
-  host.append(el('button', {
-    class: 'btn wide', style: { marginTop: '6px' },
-    onClick: () => marchTargetDialog(st, cityId, ctx),
-  }, '출진'));
+  // 남의 성 — 인접한 아군 성이 있으면 칠 수 있다
+  const froms = ADJ[cityId].map((e) => st.cities[e.to]).filter((x) => x.faction === st.player);
+  bar_.append(el('div', { class: 'cmd-head' }, froms.length ? '군사' : '—'));
+  if (froms.length) add('출진', () => marchDialog(st, cityId, ctx), 'btn primary');
+  else bar_.append(el('p', { class: 'muted', style: { fontSize: '.7rem', textAlign: 'center', margin: '4px 2px' } },
+    '이웃한 아군 성이 없다'));
 }
 
 function officerRow(st, s, c, ctx, plain = false) {
@@ -167,7 +201,11 @@ export async function officerDialog(st, s, ctx) {
   }
   if (mine && s.faction === NEUTRAL && s.status === 'normal') buttons.unshift({ label: '등용', value: 'recruit' });
   if (mine && s.status === 'captive' && s.captiveOf === st.player) {
-    buttons.unshift({ label: '참수', value: 'exec' }, { label: '석방', value: 'free' }, { label: '등용', value: 'crecruit' });
+    buttons.unshift({ label: '참수', value: 'exec' }, { label: '석방', value: 'free' });
+    // 군주는 거둘 수 없다 — 목을 베거나 놓아주는 수밖에
+    if (!isRulerOf(st, s)) buttons.unshift({ label: '등용', value: 'crecruit' });
+    else body.append(el('p', { class: 'muted', style: { marginTop: '10px', fontSize: '.84rem' } },
+      `${eun(o.name)} ${st.factions[s.faction].name}의 주인이다. 무릎 꿇릴 수는 없다.`));
   }
 
   const act = await showModal({ title: '무장', body, buttons });

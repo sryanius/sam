@@ -99,8 +99,14 @@ export function endMonth(st) {
     if (cs.length === 0) {
       f.alive = false;
       rep.push(`${f.name}군이 무너졌다.`);
-      // 남은 무장은 재야로
-      for (const s of factionOfficers(st, f.id)) { s.faction = NEUTRAL; s.loyalty = 0; }
+      // 남은 무장은 재야로. 사로잡혀 있던 자도 더는 섬길 주인이 없다 —
+      // 이래야 갇힌 군주를 그제야 거둘 수 있다.
+      for (const s of st.officers) {
+        if (s.faction !== f.id) continue;
+        s.faction = NEUTRAL;
+        s.loyalty = 0;
+        s.found = true;
+      }
       for (const g of st.factions) {
         g.allies = g.allies.filter((x) => x !== f.id);
         delete g.truce[f.id];
