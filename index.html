@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>삼국지</title>
+<meta name="description" content="46개 도시와 무장 408명. 내정과 계략으로 세력을 키우고, 육각 전장에서 일기토와 공성으로 천하를 다툰다.">
+<meta name="theme-color" content="#201c17">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="삼국지">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ─────────── 타이틀 ─────────── -->
+<div id="title" class="screen active">
+  <div class="title-inner">
+    <h1>三國志</h1>
+    <p class="sub">삼국지</p>
+
+    <div id="scenario-list" class="scenario-list"></div>
+
+    <div id="lord-pick" class="lord-pick hidden">
+      <h2 id="lord-pick-title">군주를 고르시오</h2>
+      <div id="lord-list" class="lord-list"></div>
+      <div class="row">
+        <button id="lord-back" class="btn">시나리오로</button>
+        <button id="lord-start" class="btn primary" disabled>시작</button>
+      </div>
+    </div>
+
+    <div class="title-foot">
+      <button id="btn-load" class="btn">불러오기</button>
+      <span class="hint">브라우저에 저장된다. 파일로도 내보낼 수 있다.</span>
+    </div>
+  </div>
+</div>
+
+<!-- ─────────── 전략 화면 ─────────── -->
+<div id="strategy" class="screen">
+  <header id="topbar">
+    <div class="date"><span id="date-label">—</span><span id="date-short">—</span></div>
+    <div class="faction"><span id="faction-badge" class="badge"></span><span id="faction-name">—</span></div>
+    <div class="stats" id="top-stats"></div>
+    <div class="top-actions">
+      <button id="btn-fit" class="btn small" title="지도 전체 보기">전체</button>
+      <button id="btn-log" class="btn small">기록</button>
+      <button id="btn-info" class="btn small">일람</button>
+      <button id="btn-save" class="btn small">저장</button>
+      <button id="btn-end" class="btn small primary">턴 종료</button>
+    </div>
+  </header>
+
+  <main id="strategy-body">
+    <div id="map-wrap">
+      <canvas id="map"></canvas>
+      <div id="map-tip" class="map-tip hidden"></div>
+    </div>
+    <aside id="side">
+      <div id="side-content"><p class="muted">도시를 고르시오.</p></div>
+    </aside>
+  </main>
+
+  <footer id="logbar">
+    <div id="log"></div>
+  </footer>
+</div>
+
+<!-- ─────────── 전투 화면 ─────────── -->
+<div id="battle" class="screen">
+  <header id="battle-top">
+    <span id="battle-title">—</span>
+    <span id="battle-day" class="pill">1일</span>
+    <span id="battle-turn" class="pill">아군 차례</span>
+    <div class="grow"></div>
+    <button id="btn-battle-auto" class="btn small">자동</button>
+    <button id="btn-battle-retreat" class="btn small">철수</button>
+    <button id="btn-battle-end" class="btn small primary">턴 넘김</button>
+  </header>
+  <div id="battle-body">
+    <canvas id="bmap"></canvas>
+    <aside id="battle-side">
+      <div id="unit-info"></div>
+      <div id="unit-actions"></div>
+      <div id="battle-log"></div>
+    </aside>
+  </div>
+</div>
+
+<!-- ─────────── 모달 ─────────── -->
+<div id="modal" class="modal hidden">
+  <div class="modal-box">
+    <h3 id="modal-title"></h3>
+    <div id="modal-body"></div>
+    <div id="modal-foot" class="row end"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<!-- 세로로 들면 가로로 돌리라고 안내한다 (작은 화면에서만 뜬다) -->
+<div id="rotate">
+  <div class="rotate-box">
+    <div class="rotate-icon">▭</div>
+    <p>가로로 돌려 주시오.</p>
+    <p class="small">지도와 전장이 넓어야 한다.</p>
+  </div>
+</div>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

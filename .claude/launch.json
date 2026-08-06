@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "sam3",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["tools/serve.mjs", "5175"],
+      "port": 5175
+    }
+  ]
+}

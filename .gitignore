@@ -1,0 +1,12 @@
+node_modules/
+*.log
+.DS_Store
+Thumbs.db
+
+# 서명 키와 빌드 산출물은 절대 웹 저장소에 들어가면 안 된다.
+# TWA 프로젝트는 C:\claude\sam-twa (저장소 밖) 에 있지만 이중으로 막는다.
+*.keystore
+*.jks
+*.apk
+*.aab
+*.idsig

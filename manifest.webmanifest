@@ -1,0 +1,21 @@
+{
+  "name": "삼국지 — Three Kingdoms",
+  "short_name": "삼국지",
+  "description": "46개 도시와 무장 408명. 내정과 계략으로 세력을 키우고, 육각 전장에서 일기토와 공성으로 천하를 다툰다.",
+  "lang": "ko",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "landscape",
+  "theme_color": "#201c17",
+  "background_color": "#171512",
+  "categories": ["games"],
+  "icons": [
+    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "./icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
