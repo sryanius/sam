@@ -2,7 +2,10 @@
 
 > 세션을 재개하면 이 파일 → `SPEC.md` 순으로 읽어라. 코드부터 뒤지지 마라.
 
-## §0. 지금 어디까지 왔나 (2026-08-06)
+## §0. 지금 어디까지 왔나 (2026-08-07)
+
+**배포됨: https://sryanius.github.io/sam/ · 안드로이드 앱 `삼국지-1.0.0.apk` (§6)**
+
 
 **한 판이 처음부터 끝까지 돈다.** 시나리오 고르기 → 군주 고르기 → 내정/인사/군사/계략/외교 →
 출진 → 육각 전투(이동·공격·계략·일기토·공성) → 성 함락 → 포로 처분 → 다음 달.
@@ -22,7 +25,8 @@
 ## §1. 검증 현황
 
 ```bash
-node tools/imports.mjs    # import 385/385
+node tools/imports.mjs    # import 387/387 + 중복·미아 id + sw.js APP_SHELL 목록
+node tools/josa-scan.mjs  # 보간 뒤 조사 직접 표기 (0곳)
 node tools/smoke.mjs      # 5825/5825
 node tools/balance.mjs 25 # 25년 장기 진행 이상 없음
 ```
@@ -85,7 +89,7 @@ node tools/balance.mjs 25 # 25년 장기 진행 이상 없음
 4. **황제·관직·작위가 없다.** 헌제는 무장으로만 있다. 천자 옹립·관직 수여를 넣으면
    명성(`faction.fame`)이 지금보다 훨씬 쓸모 있어진다.
 5. **무장 성장이 없다.** 능력치가 고정이다. `merit`(공적)은 쌓이지만 아직 쓰이는 데가 없다.
-6. **모바일 레이아웃은 최소한만** 맞춰 뒀다(900px 이하에서 세로 배치). 실기 확인은 안 했다.
+6. ~~모바일 레이아웃~~ → §5 에서 가로 고정으로 다시 짰다. 실기 확인은 아직 안 했다.
 7. **일기토 거절 판정이 후하다.** `duelAccepted` 가 52% 기준이라 자주 붙는다.
    원작 느낌을 원하면 낮춰라.
 
@@ -159,20 +163,49 @@ node tools/balance.mjs 25 # 25년 장기 진행 이상 없음
 
 **실기기 확인은 못 했다.** 브라우저 뷰포트로만 쟀다.
 
-## §6. 앱(TWA)으로 감쌀 때 — 아직 안 함
+## §6. 배포와 앱(TWA) — 완료
 
-용병단(`C:\claude\merc-twa`) 때 깔아둔 것이 그대로 쓰인다. **이번엔 지난번 함정 둘이 이미 풀려 있다.**
+### 6.1 웹
 
-- `sryanius/sryanius.github.io` 에 **오리진 루트** `.well-known/assetlinks.json` + `.nojekyll` 존재.
-  assetlinks 는 배열이라 삼국지 항목만 **추가**하면 된다 (merc 항목을 지우지 마라).
-- Android SDK·bubblewrap·`bin` 정션·build-tools 36.1.0 전부 `C:\claude\merc-twa` 안에 있다.
+| 항목 | 값 |
+|---|---|
+| 저장소 | `sryanius/sam` (public, 기본 브랜치 `master`) |
+| 주소 | `https://sryanius.github.io/sam/` |
+| Pages | `master` / 루트, `.nojekyll` 포함 |
 
-남은 일:
-1. sam3 를 GitHub Pages 저장소로 올린다 (예: `sryanius/sam3` → `https://sryanius.github.io/sam3/`)
-2. `manifest.webmanifest` + 아이콘 4종 + 서비스워커. **`"orientation": "landscape"`** 로.
-3. TWA 프로젝트는 **웹 저장소 밖**에 만든다 (`C:\claude\sam3-twa`) — 키스토어가 공개되면 안 된다
-4. `assetlinks.json` 에 새 패키지의 SHA256 지문 추가 → 구글 API 로 검증 확인
-5. `bubblewrap update` 는 `AndroidManifest.xml` 을 덮어쓴다 → `android:appCategory="game"` 다시 넣기
+PWA 자산: `manifest.webmanifest`(**`orientation: landscape`**), 아이콘 6장, `sw.js`.
+아이콘은 `tools/icons.mjs` 가 **직접 그려서 PNG 를 쓴다** — 외부 의존성 0 규칙을 지키려고
+zlib(표준 라이브러리)만으로 IHDR/IDAT/IEND 를 손으로 조립한다. 그림을 바꾸려면 그 파일만 고쳐라.
+
+`sw.js` 의 `APP_SHELL` 은 손으로 적은 목록이라 모듈을 추가하면 낡는다.
+**`tools/imports.mjs` 가 실제 모듈과 대조해서 검사한다.**
+★ 게임을 고쳐 배포할 때는 `CACHE` 버전(`sam-v1` → `sam-v2`)을 올려라. 안 그러면 폰에 옛 버전이 남는다.
+
+### 6.2 앱
+
+프로젝트는 **`C:\claude\sam-twa`** — 웹 저장소 밖이다(키스토어가 공개되면 안 된다).
+절차와 함정은 그쪽 `README.md` 에 있다.
+
+| 항목 | 값 |
+|---|---|
+| 패키지 | `io.github.sryanius.sam` |
+| 런처 이름 | 삼국지 |
+| 여는 주소 | `https://sryanius.github.io/sam/` |
+| 화면 방향 | `landscape` |
+| 게임 분류 | `appCategory=0` = `CATEGORY_GAME` (삼성 게이밍 허브 인식용) |
+| 서명 SHA256 | `03:88:4A:6F:8B:8E:…:1E:E6:5E:94` |
+| 크기 | 0.87 MB |
+| 결과물 | `C:\claude\sam-twa\삼국지-1.0.0.apk` |
+
+`assetlinks.json` 은 오리진 루트(`sryanius/sryanius.github.io`)에 있고 **배열**이라
+용병단 항목 뒤에 삼국지 항목을 붙였다. **둘 중 하나를 지우지 마라.**
+구글 digitalassetlinks API 로 두 건 모두 인정됨을 확인했다.
+
+**게임만 고칠 때는 APK 를 다시 만들 필요가 없다** — `sryanius/sam` 에 푸시하면 앱도 같이 바뀐다.
+아이콘·앱 이름·버전·화면 방향을 바꿀 때만 다시 빌드한다.
+
+**실기기 확인은 못 했다.** 설치·게이밍 허브 등록·주소창 없는 전체화면·가로 고정은
+폰에서 봐야 한다. 여기서는 APK 내용물과 서버 응답까지만 실측했다.
 
 ## §7. 다음 세션 작업 순서 (제안)
 
