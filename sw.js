@@ -9,10 +9,13 @@
  * 등록도 `./sw.js` 로 한다. 워커 기본 스코프 = 자기 파일이 있는 디렉터리라 scope 를 따로 줄 필요가 없다.
  *
  * ── 배포 절차 (★ 안 하면 폰에 옛 버전이 남는다) ────────────────────────────
- *   1. CACHE 버전을 올린다 (`sam-v1` → `sam-v2`).
- *   2. 모듈을 추가·삭제했으면 APP_SHELL 도 손본다.
+ *   1. CACHE 버전을 올린다 (`sam-v2` → `sam-v3`).
+ *   2. `src/version.js` 의 BUILD 도 같이 올린다 (타이틀에 찍혀 확인용이 된다).
+ *   3. 모듈을 추가·삭제했으면 APP_SHELL 도 손본다.
+ *
+ *   버전을 올리면 main.js 가 새 워커를 감지해 **스스로 한 번 다시 불러온다.**
  *   깜빡해도 완전히 망가지지는 않는다 — 정적 자산은 stale-while-revalidate 라
- *   한 번 더 새로고침하면 최신이 된다. 다만 즉시 반영되게 하려면 버전을 올려라.
+ *   한 번 더 새로고침하면 최신이 된다.
  *
  * ── 캐시 전략 ──────────────────────────────────────────────────────────────
  *   · 내비게이션(문서 요청) → network-first + 캐시 폴백(`./index.html`)
@@ -24,7 +27,7 @@
  * 온라인에서 처음 쓰는 순간 캐시에 들어간다.
  */
 
-const CACHE = 'sam-v2';
+const CACHE = 'sam-v3';
 
 const APP_SHELL = [
   './',
@@ -32,6 +35,7 @@ const APP_SHELL = [
   './manifest.webmanifest',
   './css/style.css',
   './src/main.js',
+  './src/version.js',
   './src/core/rng.js',
   './src/core/util.js',
   './src/data/cities.js',

@@ -106,6 +106,8 @@ button, input, select { font-family: inherit; color: inherit; }
 .lord .meta { font-size: .74rem; color: #5c5443; }
 .title-foot { margin-top: 18px; display: flex; gap: 12px; align-items: center; justify-content: center; }
 .title-foot .hint { color: #7d7259; font-size: .78rem; }
+/* 어느 판이 도는지 — 폰에서 갱신 확인용 */
+.build { margin-top: 14px; color: #5c5445; font-size: .72rem; letter-spacing: .06em; }
 
 /* ─────────── 전략 화면 ─────────── */
 #topbar {
