@@ -6,6 +6,7 @@ import {
   TERRAIN, axial, hexToPixel, hexDistance, neighborsOf, DIRS, W, H,
 } from '../game/battle/map.js';
 import { paintTerrain, paintUnit } from './battleart.js';
+import { shipOf } from '../data/ships.js';
 import {
   UNIT_TYPES, unitsOf, tileOf, moveOptions, moveUnit, attack, canAttack,
   useTactic, tacticAvailable, TACTICS, canDuel, duelAccepted, duel, retreat,
@@ -210,7 +211,7 @@ export class BattleView {
       const mine = u.side === this.mySide;
       const s = this.size;
 
-      paintUnit(g, u, x, y, s, mine, u === this.sel);
+      paintUnit(g, u, x, y, s, mine, u === this.sel, t.terr === '강');
 
       // 병력·사기 막대는 **위쪽**에. 아래는 이름이 쓴다.
       const bw = s * 1.24, bh = Math.max(2, s * 0.13);
@@ -511,10 +512,15 @@ export class BattleView {
     if (u && !u.dead) {
       const o = OFFICERS[u.officerId];
       const card = el('div', { class: 'unit-card' });
-      card.append(el('div', { class: 'nm' }, u.name, el('span', { style: { fontSize: '.74rem', marginLeft: '6px' } }, u.type)));
+      card.append(el('div', { class: 'nm' }, u.name,
+        el('span', { style: { fontSize: '.74rem', marginLeft: '6px', color: 'var(--seal)' } }, u.type)));
       card.append(el('div', {}, `병력 ${num(u.troops)} / ${num(u.maxTroops)}`), bar(u.troops, u.maxTroops));
       card.append(el('div', {}, `사기 ${Math.round(u.morale)}`), bar(u.morale, 100));
       card.append(el('div', {}, `훈련 ${Math.round(u.train)}   이동력 ${u.mp}   계략 ${u.tactics}`));
+      const wet = tileOf(this.b, u)?.terr === '강';
+      card.append(el('div', { style: { fontSize: '.78rem' } },
+        wet ? `물 위 — ${u.ship || '뗏목'} (전투력 ×${shipOf(u.ship).power})`
+            : `배 ${u.ship || '없음'}`));
       if (o) card.append(el('div', { style: { fontSize: '.78rem', color: '#6d6553' } },
         `육지 ${o.lead} 수지 ${o.navy} 무력 ${o.war} 지력 ${o.int}`));
       info.append(card);

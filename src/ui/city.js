@@ -11,6 +11,8 @@ import { caps, info, goldIncome, harvest, foodUpkeep, troopCap, conscriptMax, co
 import { eff, recruitChance, overall, isHermit } from '../game/officer.js';
 import * as CMD from '../game/commands.js';
 import { MAX_UNITS } from '../game/battle/engine.js';
+import { SHIPS, availableShips, shipCost } from '../data/ships.js';
+import { troopType } from '../data/officers.js';
 import { el, clear, showModal, closeModal, toast, bar, slider, $ } from './dom.js';
 import { portrait } from './portrait.js';
 import { eul, eun, gwa } from '../core/util.js';
@@ -184,7 +186,8 @@ export async function officerDialog(st, s, ctx) {
   trow('야망', o.amb, '의리', o.duty);
   trow('충성', s.faction === NEUTRAL ? '—' : Math.round(s.loyalty),
        '상성', ruler ? `${affinityGap(o.comp, ruler.comp)} (군주와)` : o.comp);
-  trow('공적', s.merit, '보물', s.treasures.map((t) => TREASURE_BY_ID[t]?.name).join(', ') || '—');
+  trow('병종', troopType(o), '공적', s.merit);
+  trow('보물', s.treasures.map((t) => TREASURE_BY_ID[t]?.name).join(', ') || '—', '', '');
   meta.append(tbl);
   head.append(meta);
   body.append(head);
@@ -576,32 +579,62 @@ export async function marchDialog(st, toId, ctx, fromId = -1) {
   const pool = membersIn(st, fromId, st.player).filter((s) => !s.acted);
   if (!pool.length) { toast('출진할 무장이 없다.'); return; }
 
-  // 편성 화면
-  const chosen = new Map();   // officerId -> { troops, type }
+  // 편성 화면 — 병종은 무장마다 고정이라 고르지 못한다. 배만 고른다.
+  const chosen = new Map();   // officerId -> { troops }
+  const waterRoute = !!(ADJ[fromId].find((e) => e.to === toId)?.water);
+  const techRatio = from.tech / caps(from).tech;
+  const ships = availableShips(techRatio);
+  let ship = waterRoute && ships.length ? ships[ships.length - 1] : null;
+
   const body = el('div');
   body.append(el('p', { class: 'muted', style: { fontSize: '.84rem', marginTop: 0 } },
     `${info(from).name} → ${info(to).name}   ·   병력 ${num(from.troops)}   군량 ${num(from.food)}`
-    + `   ·   적 병력 ${num(to.troops)}`));
+    + `   ·   적 병력 ${num(to.troops)}`
+    + (waterRoute ? '   ·   물길이다 — 배가 없으면 뗏목으로 싸운다' : '')));
+
+  // ─ 배 고르기 ─
+  const shipRow = el('div', { style: { margin: '8px 0' } });
+  const shipNote = el('div', { class: 'muted', style: { fontSize: '.78rem', marginTop: '3px' } });
+  const shipBtns = el('div', { class: 'tabs' });
+  const setShip = (v) => {
+    ship = v;
+    [...shipBtns.children].forEach((b) => b.classList.toggle('on', b.dataset.v === String(v)));
+    const S = v ? SHIPS[v] : null;
+    shipNote.textContent = S
+      ? `${S.desc}  ·  물 위 전투력 ×${S.power}, 이동 ${S.mp}  ·  부대당 금 ${S.cost}`
+      : '배 없이 간다. 물에 들어가면 뗏목이라 전투력이 반토막 난다.';
+    update();
+  };
+  for (const v of [null, ...ships]) {
+    shipBtns.append(el('button', {
+      class: 'btn', 'data-v': String(v),
+      onClick: () => setShip(v),
+    }, v || '없음'));
+  }
+  shipRow.append(el('div', { style: { fontSize: '.82rem', color: 'var(--seal)' } },
+    `배  (${info(from).name}의 기술로 지을 수 있는 것)`), shipBtns, shipNote);
+  if (ships.length === 0) shipNote.textContent = '기술이 모자라 아직 배를 짓지 못한다.';
 
   const totalLine = el('div', { style: { margin: '6px 0', fontWeight: '600' } });
   const tbl = el('table', { class: 'grid' });
-  tbl.append(el('tr', {}, ...['출진', '무장', '육지', '수지', '무력', '지력', '병종', '병력'].map((h) => el('th', {}, h))));
+  tbl.append(el('tr', {}, ...['출진', '무장', '병종', '육지', '수지', '무력', '지력', '병력'].map((h) => el('th', {}, h))));
 
   const update = () => {
     const t = [...chosen.values()].reduce((a, x) => a + x.troops, 0);
     const foodNeed = Math.round(t);
-    totalLine.textContent = `부대 ${chosen.size}/${MAX_UNITS}   총 병력 ${num(t)}   필요 군량 ${num(foodNeed)}`
-      + (t > from.troops ? '  ← 병력 초과' : foodNeed > from.food ? '  ← 군량 부족' : '');
-    totalLine.style.color = (t > from.troops || foodNeed > from.food) ? 'var(--bad)' : '';
+    const gold = shipCost(ship) * chosen.size;
+    const bad = t > from.troops ? '  ← 병력 초과'
+      : foodNeed > from.food ? '  ← 군량 부족'
+      : gold > from.gold ? '  ← 금 부족' : '';
+    totalLine.textContent = `부대 ${chosen.size}/${MAX_UNITS}   총 병력 ${num(t)}`
+      + `   군량 ${num(foodNeed)}` + (gold ? `   배값 ${gold}` : '') + bad;
+    totalLine.style.color = bad ? 'var(--bad)' : '';
   };
 
   const perUnit = Math.max(500, Math.floor(from.troops * 0.8 / Math.min(pool.length, MAX_UNITS)));
   for (const s of pool.sort((a, b) => eff(b).lead + eff(b).war - eff(a).lead - eff(a).war)) {
     const o = eff(s);
-    const defType = o.war >= 78 && o.lead >= 70 ? '기병' : o.int >= 78 ? '궁병' : '보병';
     const cb = el('input', { type: 'checkbox' });
-    const sel = el('select', {},
-      ...['보병', '기병', '궁병', '수군'].map((t) => el('option', { value: t, selected: t === defType }, t)));
     const nInput = el('input', {
       type: 'number', min: 100, max: from.troops, step: 100, value: perUnit,
       style: { width: '5.6em' },
@@ -609,21 +642,21 @@ export async function marchDialog(st, toId, ctx, fromId = -1) {
     const sync = () => {
       if (cb.checked) {
         if (!chosen.has(s.id) && chosen.size >= MAX_UNITS) { cb.checked = false; toast(`부대는 ${MAX_UNITS}개까지.`); return; }
-        chosen.set(s.id, { troops: clamp(+nInput.value || 0, 100, from.troops), type: sel.value });
+        chosen.set(s.id, { troops: clamp(+nInput.value || 0, 100, from.troops) });
       } else chosen.delete(s.id);
       update();
     };
     cb.addEventListener('change', sync);
     nInput.addEventListener('input', sync);
-    sel.addEventListener('change', sync);
     tbl.append(el('tr', {},
       el('td', {}, cb), el('td', {}, o.name),
+      el('td', {}, troopType(o)),
       el('td', { class: 'n' }, o.lead), el('td', { class: 'n' }, o.navy),
       el('td', { class: 'n' }, o.war), el('td', { class: 'n' }, o.int),
-      el('td', {}, sel), el('td', {}, nInput)));
+      el('td', {}, nInput)));
   }
-  body.append(totalLine, el('div', { class: 'scroll-x' }, tbl));
-  update();
+  body.append(shipRow, totalLine, el('div', { class: 'scroll-x' }, tbl));
+  setShip(ship);
 
   const go = await showModal({
     title: '출진', body,
@@ -631,7 +664,10 @@ export async function marchDialog(st, toId, ctx, fromId = -1) {
   });
   if (!go) return;
   if (!chosen.size) { toast('부대를 골라야 하오.'); return; }
+  const gold = shipCost(ship) * chosen.size;
+  if (gold > from.gold) { toast('배를 지을 금이 모자라다.'); return; }
+  from.gold -= gold;
 
-  const picks = [...chosen.entries()].map(([officerId, v]) => ({ officerId, ...v }));
+  const picks = [...chosen.entries()].map(([officerId, v]) => ({ officerId, ...v, ship }));
   ctx.launchBattle(fromId, toId, picks);
 }

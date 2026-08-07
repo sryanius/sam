@@ -222,13 +222,16 @@ export function reachable(map, from, mp, unit) {
   return seen;
 }
 
+/**
+ * 이동 소모. **물은 누구나 들어갈 수 있다** — 배가 없으면 뗏목을 엮을 뿐이다.
+ * 배를 가진 부대는 물에서 오히려 빠르다.
+ */
 export function moveCost(tile, unit) {
   const T = TERRAIN[tile.terr];
   // 닫힌 성문과 성벽은 부수기 전에는 못 지난다
   if ((tile.terr === '성문' || tile.terr === '성벽') && tile.hp > 0) return 99;
-  if (unit.type === '수군') return tile.terr === '강' ? 1 : (T.cost >= 90 ? 99 : T.cost + 2);
-  if (tile.terr === '강') return 99;
   if (tile.terr === '성벽') return 99;
+  if (tile.terr === '강') return unit.ship ? 1 : 2;      // 뗏목은 굼뜨다
   if (unit.type === '기병' && (tile.terr === '산' || tile.terr === '숲')) return T.cost + 1;
   return T.cost;
 }

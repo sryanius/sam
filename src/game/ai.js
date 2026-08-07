@@ -21,6 +21,7 @@ import {
   moveOfficer, transport, captiveAction, plot, diplomacy, joinFaction, DEV_KINDS,
 } from './commands.js';
 import { startBattle, resolveBattle, MAX_UNITS } from './battle/engine.js';
+import { availableShips, shipCost } from '../data/ships.js';
 import { autoResolve } from './battle/ai.js';
 import { gwa } from '../core/util.js';
 
@@ -272,11 +273,18 @@ function maybeAttack(st, fid, news) {
   if (!pool.length) { if (leaveBehind) pool.push(leaveBehind); }
 
   const each = Math.floor(plan.send / pool.length);
-  const picks = pool.map((s) => {
-    const o = eff(s);
-    const type = o.war >= 78 && o.lead >= 70 ? '기병' : o.int >= 78 ? '궁병' : '보병';
-    return { officerId: s.id, troops: each, type };
-  });
+
+  // 물길이면 배를 짓는다. 금이 닿는 한 좋은 것으로 — 뗏목으로 건너면 반토막이다.
+  const water = !!(ADJ[plan.from.id].find((e) => e.to === plan.to.id)?.water);
+  let ship = null;
+  if (water) {
+    const can = availableShips(plan.from.tech / caps(plan.from).tech);
+    for (const name of [...can].reverse()) {
+      if (shipCost(name) * pool.length <= plan.from.gold * 0.6) { ship = name; break; }
+    }
+    if (ship) plan.from.gold -= shipCost(ship) * pool.length;
+  }
+  const picks = pool.map((s) => ({ officerId: s.id, troops: each, ship }));
 
   const battle = startBattle(st, plan.from.id, plan.to.id, picks);
   if (battle.error) return null;

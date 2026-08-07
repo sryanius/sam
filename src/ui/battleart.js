@@ -11,6 +11,8 @@
 // 결정성
 //   장식 위치는 타일 좌표에서 뽑은 해시로 정한다. 같은 성은 언제나 같은 그림이다.
 
+import { shipOf } from '../data/ships.js';
+
 /* ─────────────────────────── 잡일 ─────────────────────────── */
 
 /** 타일마다 고정된 0~1 난수. salt 를 바꾸면 다른 계열이 나온다. */
@@ -237,10 +239,8 @@ const HORSE = '#6b4a33';
 
 /** 병력에 따른 인원 수 — 눈으로 세력 차이가 보이게 */
 export function figureCount(u) {
-  const t = u.troops;
-  if (u.type === '수군') return 1;                     // 배 한 척, 크기로 표현
   const max = u.type === '기병' ? 3 : 5;               // 더 넣으면 서로 겹쳐 뭉갠다
-  return Math.max(1, Math.min(max, Math.round(t / (u.type === '기병' ? 2800 : 2000))));
+  return Math.max(1, Math.min(max, Math.round(u.troops / (u.type === '기병' ? 2800 : 2000))));
 }
 
 /**
@@ -270,7 +270,7 @@ function formation(n, s) {
  * @param mine     아군인가 (색)
  * @param selected 골라 놓은 부대인가
  */
-export function paintUnit(g, u, x, y, s, mine, selected) {
+export function paintUnit(g, u, x, y, s, mine, selected, water) {
   const body = mine ? '#31538f' : '#8e2f26';
   const trim = mine ? '#7ea6de' : '#dd8b7c';
   const dark = mine ? '#1d3358' : '#5a1c16';
@@ -288,7 +288,7 @@ export function paintUnit(g, u, x, y, s, mine, selected) {
     g.beginPath(); g.ellipse(x, y + s * 0.62, s * 0.82, s * 0.22, 0, 0, 7); g.stroke();
   }
 
-  if (u.type === '수군') { paintBoat(g, x, y, s, body, trim, dark, forward, u); }
+  if (water) { paintBoat(g, x, y, s, body, trim, dark, forward, u); }
   else {
     const n = figureCount(u);
     const k = s * (u.type === '기병' ? 0.44 : 0.5);    // 병사 키
@@ -445,46 +445,69 @@ function paintRider(g, x, y, k, body, trim, dark, f) {
   g.fillRect(rx - k * 0.03, y - k * 0.9, k * 0.06, k * 0.12);
 }
 
-/** 수군 — 배 한 척. 병력이 많을수록 크고 노가 늘어난다. */
+/** 물 위에서는 배로 그린다. 등급이 높을수록 크고 층집이 붙는다. */
 function paintBoat(g, x, y, s, body, trim, dark, f, u) {
-  const big = Math.max(0.6, Math.min(1, u.troops / 6000));
-  const w = s * (0.50 + big * 0.20), h = s * 0.30;
+  const S = shipOf(u.ship);
+  const w = s * S.beam, h = s * 0.30;
+  const raft = !u.ship;
 
-  g.fillStyle = '#7a5a3a';                              // 노
-  const oars = 2 + Math.round(big * 3);
-  g.strokeStyle = '#8a6a44';
-  g.lineWidth = Math.max(1, s * 0.05);
-  for (let i = 0; i < oars; i++) {
-    const ox = x - w * 0.7 + (i / (oars - 1 || 1)) * w * 1.4;
+  if (raft) {                                           // 뗏목 — 통나무를 엮었을 뿐이다
+    g.fillStyle = '#6b4a2e';
+    for (let i = -2; i <= 2; i++) {
+      g.fillRect(x - w * 0.9, y - h * 0.2 + i * s * 0.11, w * 1.8, s * 0.08);
+    }
+    g.strokeStyle = '#3f2c1a';
+    g.lineWidth = Math.max(1, s * 0.05);
+    g.beginPath(); g.moveTo(x - w * 0.4, y - h * 0.4); g.lineTo(x - w * 0.4, y + h * 0.5); g.stroke();
+    g.beginPath(); g.moveTo(x + w * 0.4, y - h * 0.4); g.lineTo(x + w * 0.4, y + h * 0.5); g.stroke();
+  } else {
+    g.strokeStyle = '#8a6a44';                          // 노 — 배가 클수록 많다
+    g.lineWidth = Math.max(1, s * 0.05);
+    const oars = 2 + Math.round(S.power * 2.5);
+    for (let i = 0; i < oars; i++) {
+      const ox = x - w * 0.7 + (i / (oars - 1 || 1)) * w * 1.4;
+      g.beginPath();
+      g.moveTo(ox, y + h * 0.1);
+      g.lineTo(ox - f * s * 0.16, y + h * 0.85);
+      g.stroke();
+    }
+    g.fillStyle = '#6b4a2e';                            // 선체
     g.beginPath();
-    g.moveTo(ox, y + h * 0.1);
-    g.lineTo(ox - f * s * 0.16, y + h * 0.85);
-    g.stroke();
+    g.moveTo(x - w, y - h * 0.2);
+    g.lineTo(x + w, y - h * 0.2);
+    g.quadraticCurveTo(x + w * 0.5, y + h * 1.1, x, y + h * 1.1);
+    g.quadraticCurveTo(x - w * 0.5, y + h * 1.1, x - w, y - h * 0.2);
+    g.closePath(); g.fill();
+    g.fillStyle = '#8a6540';
+    g.fillRect(x - w, y - h * 0.24, w * 2, h * 0.2);
+
+    // 층집 — 대선·누선은 갑판 위에 집을 올린다
+    for (let d = 0; d < S.decks; d++) {
+      const dw = w * (0.66 - d * 0.16), dh = s * 0.22;
+      const dy = y - h * 0.24 - (d + 1) * dh;
+      g.fillStyle = '#7a5636';
+      g.fillRect(x - dw, dy, dw * 2, dh);
+      g.fillStyle = '#4c3a24';
+      g.fillRect(x - dw, dy, dw * 2, s * 0.05);
+    }
+
+    const mastTop = y - h * 0.3 - S.decks * s * 0.22 - s * 0.36;
+    g.strokeStyle = '#5a4630';                          // 돛대
+    g.lineWidth = Math.max(1, s * 0.07);
+    g.beginPath(); g.moveTo(x, y - h * 0.3); g.lineTo(x, mastTop); g.stroke();
+    g.fillStyle = body;                                 // 돛
+    g.fillRect(x - w * 0.5, mastTop + s * 0.04, w, s * 0.3);
+    g.fillStyle = trim;
+    g.fillRect(x - w * 0.5, mastTop + s * 0.04, w, s * 0.07);
   }
 
-  g.fillStyle = '#6b4a2e';                              // 선체
-  g.beginPath();
-  g.moveTo(x - w, y - h * 0.2);
-  g.lineTo(x + w, y - h * 0.2);
-  g.quadraticCurveTo(x + w * 0.5, y + h * 1.1, x, y + h * 1.1);
-  g.quadraticCurveTo(x - w * 0.5, y + h * 1.1, x - w, y - h * 0.2);
-  g.closePath(); g.fill();
-  g.fillStyle = '#8a6540';
-  g.fillRect(x - w, y - h * 0.24, w * 2, h * 0.2);
-
-  g.strokeStyle = '#5a4630';                            // 돛대
-  g.lineWidth = Math.max(1, s * 0.07);
-  g.beginPath(); g.moveTo(x, y - h * 0.3); g.lineTo(x, y - s * 0.66); g.stroke();
-  g.fillStyle = body;                                   // 돛 — 네모 한 장이면 충분하다
-  g.fillRect(x - w * 0.5, y - s * 0.62, w, s * 0.32);
-  g.fillStyle = trim;
-  g.fillRect(x - w * 0.5, y - s * 0.62, w, s * 0.07);
-
-  // 갑판 위 병사 둘
-  for (const dx of [-0.4, 0.34]) {
+  // 갑판 위 병사 — 병력이 많으면 셋
+  const crew = u.troops > 5000 ? 3 : 2;
+  for (let i = 0; i < crew; i++) {
+    const dx = (i / (crew - 1 || 1) - 0.5) * w * 1.1;
     g.fillStyle = dark;
-    g.fillRect(x + dx * w - s * 0.06, y - h * 0.55, s * 0.12, s * 0.24);
+    g.fillRect(x + dx - s * 0.05, y - h * 0.52, s * 0.11, s * 0.22);
     g.fillStyle = SKIN;
-    g.beginPath(); g.arc(x + dx * w, y - h * 0.68, s * 0.07, 0, 7); g.fill();
+    g.beginPath(); g.arc(x + dx, y - h * 0.64, s * 0.065, 0, 7); g.fill();
   }
 }

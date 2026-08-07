@@ -3,23 +3,30 @@
 // 하루(턴)에 공격측 → 방어측 순으로 움직인다. 최대 30일.
 // 부대 하나는 이동 + 행동 하나. 행동은 공격/계략/일기토/설전/대기 중 하나.
 
-import { CITIES } from '../../data/cities.js';
+import { CITIES, ADJ } from '../../data/cities.js';
 import { OFFICERS } from '../../data/officers.js';
 import { clamp, num, iga, eul, eun, euro } from '../../core/util.js';
 import { rng } from '../../core/rng.js';
 import { base, NEUTRAL, officerState, membersIn } from '../state.js';
 import { weaponBonus, wallBonus, info, caps } from '../city.js';
 import { eff } from '../officer.js';
+import { troopType } from '../../data/officers.js';
+import { SHIPS, shipOf, availableShips, shipCost, SHIP_ORDER } from '../../data/ships.js';
 import {
   makeBattleMap, TERRAIN, axial, hexDistance, neighborsOf, reachable, pathTo, moveCost,
   isWall, breach, W, H,
 } from './map.js';
 
+/**
+ * 병종은 **무장마다 고정**이다(officers.js 의 troopType). 출진할 때 고르지 못한다.
+ * 누구를 데려가느냐가 곧 부대 구성이다.
+ *
+ * 물 위에서는 병종 대신 **배**가 힘을 정한다 — data/ships.js.
+ */
 export const UNIT_TYPES = {
-  보병: { mp: 4, desc: '단단하다. 산과 숲에서 잘 버틴다.' },
-  기병: { mp: 7, desc: '멀리 달린다. 평지에서 강하다.' },
+  보병: { mp: 4, desc: '단단하다. 산과 숲에서 잘 버티고 성벽을 두들긴다.' },
+  기병: { mp: 7, desc: '멀리 달린다. 평지에서 강하고 궁병에 강하다.' },
   궁병: { mp: 4, range: 2, desc: '두 칸 밖에서 쏜다. 반격을 받지 않는다.' },
-  수군: { mp: 6, desc: '물 위에서만 제 힘을 낸다.' },
 };
 
 export const MAX_UNITS = 6;
@@ -44,7 +51,9 @@ export function startBattle(st, fromCityId, toCityId, picks) {
   const foodNeed = Math.round(total * 1.0);   // 한 달치 원정 군량
   if (from.food < foodNeed) return { error: `군량이 모자라다 (${num(foodNeed)}석 필요)` };
 
-  const naval = picks.every((p) => p.type === '수군');
+  // 수로로 이어진 성을 치면 수전이다 — 무엇을 데려갔는지가 아니라 길이 정한다
+  const link = ADJ[fromCityId].find((e) => e.to === toCityId);
+  const naval = !!(link && link.water);
   const map = makeBattleMap(toCityId, true, naval);
 
   const battle = {
@@ -67,25 +76,27 @@ export function startBattle(st, fromCityId, toCityId, picks) {
   picks.forEach((p, i) => {
     const s = officerState(st, p.officerId);
     s.acted = true;
-    battle.units.push(makeUnit(battle, 'A', s, p.troops, p.type, from, attWeapon, i));
+    battle.units.push(makeUnit(battle, 'A', s, p.troops, p.ship, from, attWeapon, i));
   });
 
-  // 방어군 — 그 도시에 있는 무장으로 자동 편성
+  // 방어군 — 그 도시에 있는 무장으로 자동 편성.
+  // 제 성을 지키는 쪽이라 그 성의 기술로 지을 수 있는 가장 좋은 배를 이미 갖고 있다.
   const defenders = membersIn(st, toCityId, defFid).slice(0, MAX_UNITS);
   const defWeapon = weaponBonus(to);
+  const defShips = availableShips(to.tech / caps(to).tech);
+  const defShip = defShips.length ? defShips[defShips.length - 1] : null;
   if (defenders.length === 0) {
     // 무장이 없는 성 — 병사만 남은 수비대
     battle.units.push({
       ...blankUnit(), id: 'D0', side: 'D', officerId: -1, name: '수비대',
       troops: Math.max(200, to.troops), maxTroops: Math.max(200, to.troops),
-      morale: to.morale, train: to.train, type: '보병', weapon: defWeapon,
+      morale: to.morale, train: to.train, type: '보병', ship: defShip, weapon: defWeapon,
+      stat: { lead: 45, navy: 40, war: 45, int: 30, cha: 40 },
     });
   } else {
     const share = Math.floor(to.troops / defenders.length);
     defenders.forEach((s, i) => {
-      const o = eff(s);
-      const type = naval ? '수군' : (o.war >= 78 && o.lead >= 70 ? '기병' : o.int >= 76 ? '궁병' : '보병');
-      battle.units.push(makeUnit(battle, 'D', s, share, type, to, defWeapon, i));
+      battle.units.push(makeUnit(battle, 'D', s, share, defShip, to, defWeapon, i));
     });
   }
   to.troops = 0;
@@ -110,7 +121,7 @@ function blankUnit() {
   };
 }
 
-function makeUnit(battle, side, s, troops, type, city, weapon, idx) {
+function makeUnit(battle, side, s, troops, ship, city, weapon, idx) {
   const o = eff(s);
   return {
     ...blankUnit(),
@@ -122,12 +133,22 @@ function makeUnit(battle, side, s, troops, type, city, weapon, idx) {
     maxTroops: Math.max(1, Math.round(troops)),
     morale: clamp(city.morale + (o.cha - 55) * 0.2, 20, 100),
     train: city.train,
-    type,
+    type: troopType(o),          // 무장마다 고정
+    ship: ship || null,          // 물에 들어가야 쓰인다. 없으면 뗏목.
     weapon,
     stat: { lead: o.lead, navy: o.navy, war: o.war, int: o.int, cha: o.cha },
     tactics: o.int >= 85 ? 4 : o.int >= 70 ? 3 : o.int >= 50 ? 2 : 1,
   };
 }
+
+/** 그 부대가 지금 물 위에 있는가 */
+export function onWater(battle, u) {
+  const t = battle.map.tiles[axial(u.q, u.r)];
+  return !!t && t.terr === '강';
+}
+
+/** 물 위에서 실제로 타고 있는 배 (없으면 뗏목) */
+export const shipUsed = (u) => shipOf(u.ship);
 
 function placeUnits(battle) {
   const put = (list, zone) => {
@@ -156,10 +177,16 @@ export const aliveUnits = (battle) => battle.units.filter((u) => !u.dead);
 
 /* ─────────────────────────── 하루의 흐름 ─────────────────────────── */
 
+/** 이번 턴에 쓸 이동력 — 물 위에서는 배의 이동력을 쓴다 */
+export function unitMp(battle, u) {
+  const base = onWater(battle, u) ? shipUsed(u).mp : UNIT_TYPES[u.type].mp;
+  return base + (u.train >= 80 ? 1 : 0);
+}
+
 export function beginSide(battle, side) {
   battle.side = side;
   for (const u of unitsOf(battle, side)) {
-    u.mp = UNIT_TYPES[u.type].mp + (u.train >= 80 ? 1 : 0);
+    u.mp = unitMp(battle, u);
     u.moved = false;
     u.acted = false;
     if (u.confusedFor > 0) { u.confusedFor--; u.acted = true; u.mp = 0; }
@@ -326,7 +353,8 @@ export function attack(battle, u, target) {
 /** 부대의 전투력 */
 function unitPower(battle, u, tile, attacking, foe, foeTile) {
   const o = u.stat;
-  const cmd = o ? (battle.naval || tile.terr === '강' ? o.navy : o.lead) : 45;
+  const water = tile.terr === '강';
+  const cmd = o ? (water ? o.navy : o.lead) : 45;
   const war = o ? o.war : 45;
   const T = TERRAIN[tile.terr];
 
@@ -339,11 +367,10 @@ function unitPower(battle, u, tile, attacking, foe, foeTile) {
 
   p *= 1 + (war - 55) / 420;
 
-  // 병종 상성
-  if (foe) {
-    const m = typeMatch(u, foe, tile, foeTile);
-    p *= m;
-  }
+  // 물 위에서는 병종이 아니라 배가 힘을 정한다.
+  // 배를 안 가져왔으면 뗏목이라 반토막이 난다.
+  if (water) p *= shipUsed(u).power;
+  else if (foe) p *= typeMatch(u, foe, tile, foeTile);   // 뭍에서만 병종 상성
   // 성벽 안에서 지키면 단단하다 — 다만 성문이 부서진 뒤에는 그 이점이 거의 사라진다
   if (!attacking && (tile.terr === '본성' || tile.terr === '성문' || tile.terr === '성벽')) {
     const breached = battle.map.gate ? battle.map.gate.hp <= 0 : true;
@@ -354,23 +381,24 @@ function unitPower(battle, u, tile, attacking, foe, foeTile) {
   return Math.max(1, p);
 }
 
+/** 병종 삼각관계 — 기병 > 궁병 > 보병 > 기병. 지형이 그 위에 얹힌다. */
 function typeMatch(u, foe, tile, foeTile) {
   let m = 1;
   const flat = tile.terr === '평지' || tile.terr === '가도' || tile.terr === '사막';
   if (u.type === '기병') {
     if (foe.type === '궁병') m *= 1.28;
-    if (foe.type === '보병') m *= 1.06;
+    if (foe.type === '보병') m *= 0.94;
     m *= flat ? 1.14 : 0.9;
   } else if (u.type === '보병') {
-    if (foe.type === '기병') m *= 1.18;
+    if (foe.type === '기병') m *= 1.20;
+    if (foe.type === '궁병') m *= 0.94;
     if (tile.terr === '산' || tile.terr === '숲') m *= 1.1;
   } else if (u.type === '궁병') {
-    if (foe.type === '보병') m *= 1.12;
-    if (foe.type === '기병') m *= 0.92;
-  } else if (u.type === '수군') {
-    m *= tile.terr === '강' ? 1.32 : 0.68;
+    if (foe.type === '보병') m *= 1.18;
+    if (foe.type === '기병') m *= 0.88;
   }
-  if (foe.type === '수군' && foeTile && foeTile.terr !== '강') m *= 1.2;
+  // 물에 떠 있는 적은 뭍에서 치기 쉽다
+  if (foeTile && foeTile.terr === '강' && tile.terr !== '강') m *= 1.18;
   return m;
 }
 
@@ -656,3 +684,4 @@ function fleeSurvivors(st, survD, fid, fromCityId) {
 }
 
 export { hexDistance, TERRAIN, axial, neighborsOf, tileOf as tileUnder };
+export { SHIPS, SHIP_ORDER, availableShips, shipCost, troopType };

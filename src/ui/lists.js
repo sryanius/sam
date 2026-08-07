@@ -1,7 +1,7 @@
 // 일람 — 세력 순위, 무장, 도시, 연표.
 
 import { CITIES } from '../data/cities.js';
-import { OFFICERS } from '../data/officers.js';
+import { OFFICERS, troopType } from '../data/officers.js';
 import { num, comma, grade, dateLabel } from '../core/util.js';
 import { base, NEUTRAL, factionCities, factionOfficers, power } from '../game/state.js';
 import { caps, info, troopCap } from '../game/city.js';
@@ -85,13 +85,14 @@ function officersPane(st, ctx) {
         el('td', {}, o.name),
         el('td', {}, f),
         el('td', {}, info(st.cities[s.city]).name),
+        el('td', {}, troopType(o)),
         el('td', { class: 'n' }, o.lead), el('td', { class: 'n' }, o.navy),
         el('td', { class: 'n' }, o.war), el('td', { class: 'n' }, o.int),
         el('td', { class: 'n' }, o.pol), el('td', { class: 'n' }, o.cha),
         el('td', { class: 'n' }, s.faction === NEUTRAL ? '—' : Math.round(s.loyalty)),
         el('td', { class: 'n' }, st.year - o.born));
     });
-    clear(host).append(table(['무장', '소속', '위치', '육지', '수지', '무력', '지력', '정치', '매력', '충성', '나이'], rows));
+    clear(host).append(table(['무장', '소속', '위치', '병종', '육지', '수지', '무력', '지력', '정치', '매력', '충성', '나이'], rows));
     if (list.length > 300) host.append(el('p', { class: 'muted' }, `… 외 ${list.length - 300}명`));
   };
   search.addEventListener('input', rebuild);

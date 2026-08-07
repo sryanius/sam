@@ -2,7 +2,9 @@
 //   node tools/smoke.mjs
 
 import { CITIES, ROUTES, ADJ, DIST } from '../src/data/cities.js';
-import { OFFICERS, OFFICER_BY_NAME } from '../src/data/officers.js';
+import { OFFICERS, OFFICER_BY_NAME, troopType } from '../src/data/officers.js';
+import { SHIPS, SHIP_ORDER, availableShips } from '../src/data/ships.js';
+import { info } from '../src/game/city.js';
 import { HOMETOWN, HOME_OF } from '../src/data/hometowns.js';
 import { SCENARIOS } from '../src/data/scenarios.js';
 import { TREASURES } from '../src/data/treasures.js';
@@ -153,6 +155,63 @@ section('전투 자동 판정');
   ok(battles >= 12, `전투를 충분히 못 돌렸다 (${battles}건)`);
   ok(taken > 0 && taken < battles, `함락 결과가 한쪽으로만 쏠렸다 (${taken}/${battles})`);
   console.log(`  전투 ${battles}건, 함락 ${taken}건, 평균 ${(days / Math.max(1, battles)).toFixed(1)}일, 일기토 ${duels}회`);
+}
+
+section('병종 고정 · 배');
+{
+  // 1) 모든 무장이 셋 중 하나로 떨어지고, 세 병종이 골고루 나온다
+  const count = { 보병: 0, 기병: 0, 궁병: 0 };
+  for (const o of OFFICERS) {
+    const t = troopType(o);
+    ok(count[t] !== undefined, `${o.name}: 알 수 없는 병종 ${t}`);
+    if (count[t] !== undefined) count[t]++;
+    ok(troopType(o) === t, `${o.name}: 병종이 부를 때마다 달라진다`);
+  }
+  for (const k of Object.keys(count)) ok(count[k] >= 40, `${k}이(가) 너무 적다 (${count[k]}명)`);
+  console.log(`  병종 분포 — 보병 ${count.보병} / 기병 ${count.기병} / 궁병 ${count.궁병}`);
+  // 태그로 못 박은 예외가 지켜지는가
+  ok(troopType(OFFICER_BY_NAME['황충']) === '궁병', '황충은 궁병이어야 한다');
+  ok(troopType(OFFICER_BY_NAME['전위']) === '보병', '전위는 보병이어야 한다');
+  ok(troopType(OFFICER_BY_NAME['여포']) === '기병', '여포는 기병이어야 한다');
+
+  // 2) 배 목록은 기술이 오를수록 늘어난다
+  ok(availableShips(0).length === 0, '기술 0에 지을 수 있는 배가 있다');
+  ok(availableShips(1).length === SHIP_ORDER.length, '기술을 채워도 못 짓는 배가 있다');
+  for (let i = 1; i < SHIP_ORDER.length; i++) {
+    const a = SHIPS[SHIP_ORDER[i - 1]], b = SHIPS[SHIP_ORDER[i]];
+    ok(b.power > a.power && b.cost > a.cost, `${SHIP_ORDER[i]}: 등급이 올랐는데 세거나 비싸지 않다`);
+  }
+  ok(SHIPS['뗏목'].power < SHIPS[SHIP_ORDER[0]].power, '뗏목이 소선보다 세다');
+
+  // 3) 수로로 이어진 성을 치면 수전, 육로면 육전
+  const st = newGame('208', 0, 909);
+  let checkedWater = false, checkedLand = false;
+  for (const c of st.cities) {
+    if (c.faction === NEUTRAL || c.troops < 3000) continue;
+    for (const e of ADJ[c.id]) {
+      const t = st.cities[e.to];
+      if (t.faction === c.faction) continue;
+      const pool = st.officers.filter((s) => s.city === c.id && s.faction === c.faction).slice(0, 3);
+      if (!pool.length) continue;
+      const each = Math.floor(c.troops * 0.5 / pool.length);
+      if (each < 300) continue;
+      const b = startBattle(st, c.id, t.id, pool.map((s) => ({ officerId: s.id, troops: each, ship: e.water ? '중선' : null })));
+      if (b.error) continue;
+      ok(b.naval === !!e.water, `${info(c).name}→${info(t).name}: 물길 ${!!e.water} 인데 수전 ${b.naval}`);
+      // 병종은 무장이 정한다 — picks 에 넣은 적이 없다
+      for (const u of b.units.filter((x) => x.side === 'A')) {
+        const o = OFFICERS[u.officerId];
+        ok(u.type === troopType(o), `${o.name}: 부대 병종(${u.type})이 무장 병종(${troopType(o)})과 다르다`);
+      }
+      if (e.water) checkedWater = true; else checkedLand = true;
+      // 되돌린다 — 다음 조합에 영향 주지 않게
+      c.troops += each * pool.length;
+      if (checkedWater && checkedLand) break;
+    }
+    if (checkedWater && checkedLand) break;
+  }
+  ok(checkedWater, '수로 전투를 한 번도 못 만들었다');
+  ok(checkedLand, '육로 전투를 한 번도 못 만들었다');
 }
 
 section('군주 포로 처분');
