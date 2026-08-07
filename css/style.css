@@ -299,7 +299,12 @@ table.grid tr:hover td { background: #e6dcc0; }
     animation: tilt 2.2s ease-in-out infinite;
   }
   .rotate-box p { margin: 14px 0 0; font-size: 1.1rem; letter-spacing: .06em; }
-  .rotate-box p.small { font-size: .84rem; color: #8d8268; margin-top: 6px; }
+  .rotate-box p.small { font-size: .84rem; color: #8d8268; margin-top: 8px; }
+  .rotate-box .btn { margin-top: 16px; padding: 12px 28px; font-size: 1.02rem; }
+  .rotate-box .diag {
+    font-size: .7rem; color: #6d6355; margin-top: 14px; line-height: 1.6;
+    max-width: 34em; white-space: pre-wrap; font-family: ui-monospace, monospace;
+  }
   @keyframes tilt { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(90deg); } }
 }
 

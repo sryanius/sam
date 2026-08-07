@@ -28,18 +28,60 @@ for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
 
 /* ─────────────────────────── 화면 방향 ───────────────────────────
  *
- * 앱(TWA)으로 설치하면 안드로이드 쪽에서 가로로 못 박지만,
- * 브라우저로 열었을 때도 가로로 잡아 두면 좋다.
- * 설치형(standalone)일 때만 건다 — 일반 탭에서 잠그면 무례하다.
- * 폰의 회전 잠금과 무관하게 걸린다. 안 되는 환경에서는 조용히 넘어간다.
+ * 가로로 보아야 하는 게임이다. 거는 자리가 셋인데 환경마다 듣는 게 다르다.
+ *   1) 앱(TWA)의 안드로이드 쪽 요청 — Chrome 이 받아 줄 때만 듣는다
+ *   2) 여기서 조용히 거는 screen.orientation.lock — 설치형에서만 시도
+ *   3) 안내 화면의 "가로로 전환" 단추 — **사람이 누른 뒤**라 가장 잘 듣는다
+ *
+ * 2번이 조용히 실패하면 원인을 알 길이 없어 한참 헤맨다.
+ * 그래서 3번은 결과를 화면에 그대로 찍는다.
  */
-(function lockLandscape() {
-  const standalone = matchMedia('(display-mode: standalone)').matches
-    || matchMedia('(display-mode: fullscreen)').matches
-    || navigator.standalone === true;
-  if (!standalone || !screen.orientation?.lock) return;
-  screen.orientation.lock('landscape').catch(() => { /* 지원 안 하면 안내 화면이 대신 뜬다 */ });
-})();
+const isStandalone = () =>
+  matchMedia('(display-mode: standalone)').matches
+  || matchMedia('(display-mode: fullscreen)').matches
+  || navigator.standalone === true;
+
+/** @returns {Promise<string>} 사람이 읽을 결과 */
+async function lockLandscape(withFullscreen) {
+  const notes = [];
+  if (!screen.orientation?.lock) return '이 브라우저는 화면 방향 고정을 지원하지 않는다';
+
+  if (withFullscreen && !document.fullscreenElement) {
+    const el = document.documentElement;
+    const ask = el.requestFullscreen || el.webkitRequestFullscreen;
+    try {
+      // 옵션 인자를 안 받는 구현이 있어 실패하면 인자 없이 한 번 더
+      try { await ask.call(el, { navigationUI: 'hide' }); }
+      catch { await ask.call(el); }
+      notes.push('전체화면 ○');
+    } catch (e) {
+      notes.push(`전체화면 ✕ ${e?.name || e}: ${e?.message ?? ''}`);
+    }
+  }
+  try {
+    await screen.orientation.lock('landscape');
+    notes.push('가로 고정 ○');
+  } catch (e) {
+    notes.push(`가로 고정 ✕ ${e.name}: ${e.message}`);
+  }
+  return notes.join('  ·  ');
+}
+
+// 열 때 한 번 조용히 시도 — 설치형일 때만. 일반 탭에서 잠그면 무례하다.
+if (isStandalone()) lockLandscape(false);
+
+// 안내 화면의 단추 — 사람이 누른 직후라 가장 잘 듣는다
+const rotateBtn = document.getElementById('rotate-force');
+const diag = document.getElementById('rotate-diag');
+if (rotateBtn) {
+  rotateBtn.addEventListener('click', async () => {
+    diag.textContent = '거는 중…';
+    const result = await lockLandscape(true);
+    const mode = isStandalone() ? '설치형' : '브라우저 탭';
+    diag.textContent = `${result}\n${mode} · ${screen.orientation?.type ?? '방향 정보 없음'}`
+      + `\n화면 ${innerWidth}×${innerHeight} · 판 ${BUILD}`;
+  });
+}
 
 /* ─────────────────────────── 서비스 워커 ───────────────────────────
  *
