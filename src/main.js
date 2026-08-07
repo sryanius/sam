@@ -41,44 +41,81 @@ const isStandalone = () =>
   || matchMedia('(display-mode: fullscreen)').matches
   || navigator.standalone === true;
 
-/** @returns {Promise<string>} 사람이 읽을 결과 */
-async function lockLandscape(withFullscreen) {
-  const notes = [];
-  if (!screen.orientation?.lock) return '이 브라우저는 화면 방향 고정을 지원하지 않는다';
+let landscapeLocked = false;
+let lockNotes = '아직 시도하지 않았다';
+let lockInFlight = null;
 
-  if (withFullscreen && !document.fullscreenElement) {
-    const el = document.documentElement;
-    const ask = el.requestFullscreen || el.webkitRequestFullscreen;
-    try {
-      // 옵션 인자를 안 받는 구현이 있어 실패하면 인자 없이 한 번 더
-      try { await ask.call(el, { navigationUI: 'hide' }); }
-      catch { await ask.call(el); }
-      notes.push('전체화면 ○');
-    } catch (e) {
-      notes.push(`전체화면 ✕ ${e?.name || e}: ${e?.message ?? ''}`);
-    }
+/**
+ * 가로로 잠근다. 먼저 그냥 걸어 보고, 안 되면 전체화면을 잡고 다시 건다.
+ * 여러 번 불러도 안전하다 — 이미 성공했으면 아무것도 하지 않고,
+ * 도는 중이면 그 시도를 같이 기다린다(첫 손짓과 안내 화면이 겹쳐 들어온다).
+ */
+function ensureLandscape() {
+  if (landscapeLocked) return Promise.resolve();
+  if (!lockInFlight) lockInFlight = attemptLandscape().finally(() => { lockInFlight = null; });
+  return lockInFlight;
+}
+
+async function attemptLandscape() {
+  lockNotes = '';
+  if (!screen.orientation?.lock) { lockNotes = '이 브라우저는 화면 방향 고정을 지원하지 않는다'; return; }
+
+  try {
+    await screen.orientation.lock('landscape');
+    landscapeLocked = true;
+    lockNotes = '가로 고정 ○';
+    return;
+  } catch (e) {
+    lockNotes = `가로 고정 ✕ ${e.name}: ${e.message}`;
+  }
+
+  // 전체화면이 아니면 안 걸어 주는 환경이 있다. 잡고 한 번 더.
+  const el = document.documentElement;
+  const ask = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (!ask || document.fullscreenElement) return;
+  try {
+    // 옵션 인자를 안 받는 구현이 있어 실패하면 인자 없이 한 번 더
+    try { await ask.call(el, { navigationUI: 'hide' }); }
+    catch { await ask.call(el); }
+  } catch (e) {
+    lockNotes += `  ·  전체화면 ✕ ${e?.name || e}`;
+    return;
   }
   try {
     await screen.orientation.lock('landscape');
-    notes.push('가로 고정 ○');
+    landscapeLocked = true;
+    lockNotes = '전체화면 ○  ·  가로 고정 ○';
   } catch (e) {
-    notes.push(`가로 고정 ✕ ${e.name}: ${e.message}`);
+    lockNotes = `전체화면 ○  ·  가로 고정 ✕ ${e.name}: ${e.message}`;
   }
-  return notes.join('  ·  ');
 }
 
-// 열 때 한 번 조용히 시도 — 설치형일 때만. 일반 탭에서 잠그면 무례하다.
-if (isStandalone()) lockLandscape(false);
+// 1) 열자마자 — 설치형일 때만. 일반 탭에서 잠그면 무례하다.
+if (isStandalone()) ensureLandscape();
 
-// 안내 화면의 단추 — 사람이 누른 직후라 가장 잘 듣는다
-const rotateBtn = document.getElementById('rotate-force');
+// 2) 첫 손짓에. 어차피 시나리오를 누르려면 화면을 건드려야 하니,
+//    따로 단추를 누를 일이 없어진다. 사람이 누른 직후라 가장 잘 듣는다.
+const onFirstTouch = () => {
+  ensureLandscape().then(() => {
+    if (landscapeLocked) document.removeEventListener('pointerdown', onFirstTouch, true);
+  });
+};
+document.addEventListener('pointerdown', onFirstTouch, true);
+
+// 3) 앱이 다시 앞으로 나올 때 — 뒤로 갔다 오면 풀리는 환경이 있다
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && !landscapeLocked) ensureLandscape();
+});
+
+// 안내 화면 — 어디를 눌러도 걸리게 하고, 결과를 그 자리에 찍는다
+const rotate = document.getElementById('rotate');
 const diag = document.getElementById('rotate-diag');
-if (rotateBtn) {
-  rotateBtn.addEventListener('click', async () => {
+if (rotate) {
+  rotate.addEventListener('click', async () => {
     diag.textContent = '거는 중…';
-    const result = await lockLandscape(true);
+    await ensureLandscape();
     const mode = isStandalone() ? '설치형' : '브라우저 탭';
-    diag.textContent = `${result}\n${mode} · ${screen.orientation?.type ?? '방향 정보 없음'}`
+    diag.textContent = `${lockNotes}\n${mode} · ${screen.orientation?.type ?? '방향 정보 없음'}`
       + `\n화면 ${innerWidth}×${innerHeight} · 판 ${BUILD}`;
   });
 }
