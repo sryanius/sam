@@ -10,3 +10,6 @@ Thumbs.db
 *.apk
 *.aab
 *.idsig
+
+# 개발용 캔버스 덤프 (tools/serve.mjs 의 /__shot)
+tools/shots/

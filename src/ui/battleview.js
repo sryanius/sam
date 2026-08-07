@@ -5,6 +5,7 @@ import { num, clamp, iga, eul } from '../core/util.js';
 import {
   TERRAIN, axial, hexToPixel, hexDistance, neighborsOf, DIRS, W, H,
 } from '../game/battle/map.js';
+import { paintTerrain, paintUnit } from './battleart.js';
 import {
   UNIT_TYPES, unitsOf, tileOf, moveOptions, moveUnit, attack, canAttack,
   useTactic, tacticAvailable, TACTICS, canDuel, duelAccepted, duel, retreat,
@@ -122,108 +123,128 @@ export class BattleView {
 
   /* ─────────── 그리기 ─────────── */
 
-  draw() {
-    if (!this.vw) { this.layout(); if (!this.vw) return; }
-    const g = this.g;
+  /**
+   * 지형은 손이 많이 가는 그림이라 **오프스크린에 한 번 구워 두고** 붙인다.
+   * 맥박이 20fps 로 도는데 221칸을 매 프레임 다시 그리면 폰이 버겁다.
+   * 상태가 바뀔 때(render)만 다시 굽는다 — 불·성벽 내구·파괴가 여기 걸린다.
+   */
+  _ensureTerrain() {
+    const wantW = this.cv.width, wantH = this.cv.height;
+    if (this._terrain && !this._terrainDirty
+        && this._terrain.width === wantW && this._terrain.height === wantH) return;
+
+    const c = this._terrain || (this._terrain = document.createElement('canvas'));
+    c.width = wantW; c.height = wantH;
+    const g = c.getContext('2d');
     g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     g.fillStyle = '#14120e';
     g.fillRect(0, 0, this.vw, this.vh);
 
-    // 길찾기는 render() 에서 한 번만 돌린다 — 맥박 때문에 매 프레임 다시 돌면 아깝다
-    const reach = this._reach || {};
-
+    const s = this.size;
     for (const t of Object.values(this.b.map.tiles)) {
       const [x, y] = this.center(t);
-      this.hexPath(x, y);
-      g.fillStyle = TERRAIN[t.terr].color;
+      const base = TERRAIN[t.terr].color;
+
+      this.hexPath(g, x, y);
+      g.save();
+      g.fillStyle = base;
       g.fill();
+      g.clip();                                   // 장식이 칸 밖으로 새지 않게
+      paintTerrain(g, t, x, y, s, base);
+      g.restore();
+
       if (t.fire > 0) {
+        this.hexPath(g, x, y);
         g.fillStyle = `rgba(220,90,30,${0.25 + t.fire * 0.16})`;
         g.fill();
       }
-      g.strokeStyle = 'rgba(20,17,12,.5)';
-      g.lineWidth = 1;
-      g.stroke();
       if (t.core) {
-        g.fillStyle = 'rgba(200,60,50,.35)';
+        this.hexPath(g, x, y);
+        g.fillStyle = 'rgba(200,60,50,.30)';
         g.fill();
-      }
-
-      // 성벽·성문의 내구
-      if ((t.terr === '성벽' || t.terr === '성문') && t.maxHp) {
-        const p = clamp(t.hp / t.maxHp, 0, 1);
-        const bw = this.size * 1.1, bh = Math.max(2, this.size * 0.14);
-        g.fillStyle = 'rgba(15,12,8,.8)';
-        g.fillRect(x - bw / 2, y + this.size * 0.4, bw, bh);
-        g.fillStyle = p > 0.5 ? '#b9a97e' : p > 0.22 ? '#d8a03a' : '#c05545';
-        g.fillRect(x - bw / 2, y + this.size * 0.4, bw * p, bh);
-        if (t.terr === '성문') {
-          g.fillStyle = '#efe0bc';
-          g.font = `${Math.max(8, this.size * 0.5)}px serif`;
-          g.textAlign = 'center'; g.textBaseline = 'middle';
-          g.fillText('門', x, y - this.size * 0.12);
-        }
       }
       if (t.breached) {
-        g.fillStyle = 'rgba(160,60,40,.25)';
+        this.hexPath(g, x, y);
+        g.fillStyle = 'rgba(160,60,40,.22)';
         g.fill();
       }
+      this.hexPath(g, x, y);
+      g.strokeStyle = 'rgba(20,17,12,.45)';
+      g.lineWidth = 1;
+      g.stroke();
+
+      // 성벽·성문의 내구
+      if ((t.terr === '성벽' || t.terr === '성문') && t.maxHp && t.hp > 0) {
+        const p = clamp(t.hp / t.maxHp, 0, 1);
+        const bw = s * 1.1, bh = Math.max(2, s * 0.13);
+        g.fillStyle = 'rgba(15,12,8,.8)';
+        g.fillRect(x - bw / 2, y + s * 0.52, bw, bh);
+        g.fillStyle = p > 0.5 ? '#b9a97e' : p > 0.22 ? '#d8a03a' : '#c05545';
+        g.fillRect(x - bw / 2, y + s * 0.52, bw * p, bh);
+      }
     }
+    this._terrainDirty = false;
+  }
 
-    // 갈 수 있는 곳 / 칠 수 있는 곳 — 지형 위에 따로 얹는다.
-    // 옅게 칠하기만 하면 지형에 묻힌다. 굵은 윤곽과 표식을 같이 준다.
-    this._highlights(g, reach);
+  draw() {
+    if (!this.vw) { this.layout(); if (!this.vw) return; }
+    const g = this.g;
 
-    // 부대
-    for (const u of this.b.units) {
-      if (u.dead) continue;
+    this._ensureTerrain();
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, this.cv.width, this.cv.height);
+    g.drawImage(this._terrain, 0, 0);
+    g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+
+    // 길찾기는 render() 에서 한 번만 돌린다 — 맥박 때문에 매 프레임 다시 돌면 아깝다
+    this._highlights(g, this._reach || {});
+
+    // 부대 — 위쪽 줄이 아래쪽에 가리지 않게 y 순으로
+    const units = this.b.units.filter((u) => !u.dead && this.b.map.tiles[axial(u.q, u.r)]);
+    units.sort((a, b) => this.center(this.b.map.tiles[axial(a.q, a.r)])[1]
+                       - this.center(this.b.map.tiles[axial(b.q, b.r)])[1]);
+
+    for (const u of units) {
       const t = this.b.map.tiles[axial(u.q, u.r)];
-      if (!t) continue;
       const [x, y] = this.center(t);
       const mine = u.side === this.mySide;
       const s = this.size;
 
-      // 병종에 따라 실루엣이 다르다 — 색(아군/적군)만으로는 한눈에 안 들어온다
-      const forward = u.side === 'A' ? 1 : -1;
-      const r = s * 0.74;
-      this._unitPath(g, x, y, r, u.type, forward);
-      g.fillStyle = mine ? '#2f5fa8' : '#a3352b';
-      g.fill();
-      g.lineWidth = u === this.sel ? 3.2 : 1.4;
-      g.strokeStyle = u === this.sel ? '#ffe9a8' : 'rgba(15,12,8,.85)';
-      g.stroke();
-      if (u.acted && mine) { g.fillStyle = 'rgba(0,0,0,.38)'; g.fill(); }
-      if (u.type === '수군') {                     // 돛대
-        g.strokeStyle = mine ? '#8fb4e8' : '#e0a49a';
-        g.lineWidth = Math.max(1.2, s * 0.08);
-        g.beginPath();
-        g.moveTo(x, y - r * 0.42); g.lineTo(x, y - r * 1.0);
-        g.stroke();
-      }
+      paintUnit(g, u, x, y, s, mine, u === this.sel);
 
-      // 이름 — 삼각형은 무게중심이 아래라 조금 내린다
-      const dy = u.type === '궁병' ? s * 0.16 : u.type === '수군' ? s * 0.14 : -s * 0.06;
-      g.fillStyle = '#f4e7c8';
-      g.font = `${Math.max(9, s * (u.type === '궁병' ? 0.6 : 0.68))}px 'Noto Serif KR', serif`;
-      g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.fillText(u.name.length > 2 ? u.name.slice(0, 2) : u.name, x, y + dy);
-
-      // 병력 막대
-      const bw = s * 1.3, bh = Math.max(2, s * 0.15);
-      g.fillStyle = 'rgba(15,12,8,.75)';
-      g.fillRect(x - bw / 2, y + s * 0.5, bw, bh);
+      // 병력·사기 막대는 **위쪽**에. 아래는 이름이 쓴다.
+      const bw = s * 1.24, bh = Math.max(2, s * 0.13);
+      const by = y - s * 0.98;
+      g.fillStyle = 'rgba(15,12,8,.78)';
+      g.fillRect(x - bw / 2, by, bw, bh);
       g.fillStyle = u.troops / u.maxTroops > 0.4 ? '#6cc06c' : '#d8a03a';
-      g.fillRect(x - bw / 2, y + s * 0.5, bw * clamp(u.troops / u.maxTroops, 0, 1), bh);
-      // 사기 막대
-      g.fillStyle = 'rgba(15,12,8,.75)';
-      g.fillRect(x - bw / 2, y + s * 0.5 + bh + 1, bw, bh);
+      g.fillRect(x - bw / 2, by, bw * clamp(u.troops / u.maxTroops, 0, 1), bh);
+      g.fillStyle = 'rgba(15,12,8,.78)';
+      g.fillRect(x - bw / 2, by + bh + 1, bw, bh);
       g.fillStyle = '#7fa8d8';
-      g.fillRect(x - bw / 2, y + s * 0.5 + bh + 1, bw * clamp(u.morale / 100, 0, 1), bh);
+      g.fillRect(x - bw / 2, by + bh + 1, bw * clamp(u.morale / 100, 0, 1), bh);
 
-      if (u.type === '기병') this.mark(g, x + s * 0.55, y - s * 0.55, '騎');
-      else if (u.type === '궁병') this.mark(g, x + s * 0.55, y - s * 0.55, '弓');
-      else if (u.type === '수군') this.mark(g, x + s * 0.55, y - s * 0.55, '水');
-      if (u.confusedFor > 0) this.mark(g, x - s * 0.55, y - s * 0.55, '亂', '#d8a03a');
+      if (u.confusedFor > 0) this.mark(g, x - s * 0.6, y - s * 0.5, '亂', '#d8a03a');
+    }
+
+    // 이름은 부대를 다 그린 뒤에 따로 — 옆 부대 그림에 가리지 않게.
+    // 띠 폭은 칸 안으로 묶는다. 안 그러면 이웃 칸을 덮어 글자가 겹쳐 읽힌다.
+    if (this.size >= 11) {
+      const s = this.size;
+      const fs = Math.max(8, s * 0.34);
+      g.font = `${fs}px 'Noto Serif KR', serif`;
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      for (const u of units) {
+        const [x, y] = this.center(this.b.map.tiles[axial(u.q, u.r)]);
+        const label = u.name.slice(0, 2);                 // 두 자면 충분하다
+        const tw = Math.min(g.measureText(label).width, s * 1.2);
+        const bx = x - tw / 2 - s * 0.08, bw = tw + s * 0.16;
+        const by = y - s * 0.72, bh = fs * 1.12;
+        g.fillStyle = 'rgba(12,10,6,.78)';
+        g.fillRect(bx, by, bw, bh);
+        g.fillStyle = u.side === this.mySide ? '#cfe0ff' : '#ffd8cf';
+        g.fillText(label, x, by + bh * 0.55, s * 1.2);
+      }
     }
   }
 
@@ -254,7 +275,7 @@ export class BattleView {
       : `rgba(238,74,58,${0.30 + p * 0.14})`;
     for (const t of tiles) {
       const [x, y] = this.center(t);
-      this.hexPath(x, y);
+      this.hexPath(g, x, y);
       g.fill();
     }
 
@@ -303,38 +324,6 @@ export class BattleView {
     g.restore();
   }
 
-  /* ─────────── 병종별 실루엣 ───────────
-     보병 방패 / 기병 화살촉 / 궁병 삼각 / 수군 배.
-     forward 는 그 부대가 나아가는 쪽(공격측 +1, 수비측 -1). */
-  _unitPath(g, x, y, r, type, forward) {
-    g.beginPath();
-    if (type === '기병') {                         // 화살촉 — 나아가는 쪽이 뾰족하다
-      const f = forward;
-      g.moveTo(x + f * r * 1.05, y);
-      g.lineTo(x + f * r * 0.20, y - r * 0.92);
-      g.lineTo(x - f * r * 0.88, y - r * 0.92);
-      g.lineTo(x - f * r * 0.60, y);
-      g.lineTo(x - f * r * 0.88, y + r * 0.92);
-      g.lineTo(x + f * r * 0.20, y + r * 0.92);
-    } else if (type === '궁병') {                  // 위가 뾰족한 삼각
-      g.moveTo(x, y - r * 1.05);
-      g.lineTo(x + r * 0.98, y + r * 0.72);
-      g.lineTo(x - r * 0.98, y + r * 0.72);
-    } else if (type === '수군') {                  // 배 — 아래가 좁은 선체
-      g.moveTo(x - r, y - r * 0.42);
-      g.lineTo(x + r, y - r * 0.42);
-      g.lineTo(x + r * 0.62, y + r * 0.86);
-      g.lineTo(x - r * 0.62, y + r * 0.86);
-    } else {                                       // 보병 — 아래가 뾰족한 방패
-      g.moveTo(x - r * 0.88, y - r * 0.92);
-      g.lineTo(x + r * 0.88, y - r * 0.92);
-      g.lineTo(x + r * 0.88, y + r * 0.18);
-      g.lineTo(x, y + r * 1.02);
-      g.lineTo(x - r * 0.88, y + r * 0.18);
-    }
-    g.closePath();
-  }
-
   mark(g, x, y, ch, color = '#f0e0b8') {
     g.fillStyle = 'rgba(15,12,8,.8)';
     g.beginPath(); g.arc(x, y, this.size * 0.30, 0, Math.PI * 2); g.fill();
@@ -344,8 +333,10 @@ export class BattleView {
     g.fillText(ch, x, y + 0.5);
   }
 
-  hexPath(x, y) {
-    const g = this.g, s = this.size;
+  /** 육각형 경로. 오프스크린에도 그리므로 컨텍스트를 받는다 —
+      this.g 를 붙박이로 쓰다가 지형 레이어가 텅 빈 적이 있다. */
+  hexPath(g, x, y) {
+    const s = this.size;
     g.beginPath();
     for (let i = 0; i < 6; i++) {
       const a = Math.PI / 180 * (60 * i - 90);
@@ -494,6 +485,7 @@ export class BattleView {
     // 갈 수 있는 칸은 상태가 바뀔 때만 다시 센다
     this._reach = (this.sel && !this.sel.dead && this.mode === 'move')
       ? moveOptions(this.b, this.sel) : {};
+    this._terrainDirty = true;   // 불·성벽 내구·파괴가 바뀌었을 수 있다
     if (this.sel && !this.sel.dead && !this.b.over) this._startPulse();
     else this._stopPulse();
 

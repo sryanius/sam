@@ -27,7 +27,7 @@
  * 온라인에서 처음 쓰는 순간 캐시에 들어간다.
  */
 
-const CACHE = 'sam-v8';
+const CACHE = 'sam-v9';
 
 const APP_SHELL = [
   './',
@@ -57,6 +57,7 @@ const APP_SHELL = [
   './src/ui/mapview.js',
   './src/ui/city.js',
   './src/ui/battleview.js',
+  './src/ui/battleart.js',
   './src/ui/lists.js',
   './src/ui/portrait.js',
   './icons/icon-192.png',
