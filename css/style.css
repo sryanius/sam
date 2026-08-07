@@ -24,7 +24,11 @@ html, body {
   color: var(--ink);
   font-family: 'Noto Serif KR', 'Nanum Myeongjo', 'Batang', '바탕', serif;
   -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   overscroll-behavior: none;
+  /* 페이지 전체 확대 차단 — 훑어 넘기는 것만 허용한다.
+     지도와 전장은 각자 touch-action:none 으로 제 손짓을 직접 받는다. */
+  touch-action: pan-x pan-y;
 }
 
 button, input, select { font-family: inherit; color: inherit; }
@@ -229,14 +233,34 @@ button, input, select { font-family: inherit; color: inherit; }
 .modal {
   position: fixed; inset: 0; background: rgba(12, 10, 7, .72);
   display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px;
+  cursor: pointer;   /* 바깥을 누르면 닫힌다는 표시 */
 }
 .modal-box {
   background: var(--panel); border: 2px solid #6d6144; border-radius: 3px;
-  max-width: 720px; width: 100%; max-height: 86vh; overflow: auto; padding: 16px 18px;
+  max-width: 720px; width: 100%; max-height: 86vh; overflow: auto; padding: 0 18px 14px;
   box-shadow: 0 12px 40px #000a;
+  cursor: auto;
 }
-.modal-box h3 { margin: 0 0 10px; font-size: 1.16rem; border-bottom: 2px solid var(--line); padding-bottom: 6px; }
-#modal-foot { margin-top: 14px; }
+/* 제목과 버튼줄은 붙어 있게 — 긴 목록에서도 닫기가 손에 닿는다 */
+.modal-box h3 {
+  position: sticky; top: 0; z-index: 2;
+  margin: 0 0 10px; padding: 12px 0 6px;
+  background: var(--panel);
+  font-size: 1.16rem; border-bottom: 2px solid var(--line);
+  display: flex; align-items: center; gap: 10px;
+}
+#modal-title-text { flex: 1; }
+#modal-x {
+  background: none; border: 1px solid var(--line); color: #6d6553;
+  width: 28px; height: 28px; line-height: 1; border-radius: 3px;
+  cursor: pointer; font-size: .9rem; flex-shrink: 0;
+}
+#modal-x:hover { background: #e6dcc0; color: var(--ink); }
+#modal-foot {
+  position: sticky; bottom: 0; z-index: 2;
+  margin-top: 14px; padding: 10px 0 4px;
+  background: var(--panel); border-top: 1px solid #d5c8a7;
+}
 
 table.grid { width: 100%; border-collapse: collapse; font-size: .84rem; }
 table.grid th, table.grid td { padding: 3px 6px; border-bottom: 1px solid #d5c8a7; text-align: left; }

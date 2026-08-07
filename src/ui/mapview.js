@@ -146,7 +146,9 @@ export class MapView {
   }
 
   down(e) {
-    this.cv.setPointerCapture?.(e.pointerId);
+    // 포인터를 붙잡아 두면 캔버스 밖으로 손이 나가도 계속 따라온다.
+    // 붙잡기가 실패할 수 있는 환경이 있어 감싼다 — 실패해도 조작 자체는 된다.
+    try { this.cv.setPointerCapture?.(e.pointerId); } catch { /* 그냥 진행 */ }
     const [x, y] = this.local(e);
     this._ptrs.set(e.pointerId, { x, y });
     this._dragged = false;

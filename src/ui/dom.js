@@ -34,7 +34,7 @@ let modalResolve = null;
  */
 export function showModal({ title, body, buttons = [{ label: '닫기', value: null }], onOpen }) {
   const wrap = $('#modal');
-  $('#modal-title').textContent = title || '';
+  $('#modal-title-text').textContent = title || '';
   const b = clear($('#modal-body'));
   if (typeof body === 'string') b.innerHTML = body;
   else if (body) b.append(body);
@@ -64,6 +64,17 @@ export function closeModal(value = null) {
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && !$('#modal').classList.contains('hidden')) closeModal(null);
 });
+
+/* 창 바깥을 누르면 닫는다 — 버튼줄까지 훑어 내려갈 것 없이.
+   상자 안에서 시작한 누름이 바깥에서 끝나는 경우(밀어서 고르다 손이 나감)에는
+   닫지 않는다. 그래서 pointerdown 위치를 기억해 둔다. */
+let downOnBackdrop = false;
+$('#modal').addEventListener('pointerdown', (e) => { downOnBackdrop = e.target === $('#modal'); });
+$('#modal').addEventListener('click', (e) => {
+  if (e.target === $('#modal') && downOnBackdrop) closeModal(null);
+  downOnBackdrop = false;
+});
+$('#modal-x').addEventListener('click', () => closeModal(null));
 
 /* ─────────────────────────── 토스트 ─────────────────────────── */
 

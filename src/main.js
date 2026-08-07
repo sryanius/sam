@@ -12,6 +12,20 @@ window.addEventListener('error', (e) => {
   console.error(e.error || e.message);
 });
 
+/* ─────────────────────────── 확대 차단 ───────────────────────────
+ *
+ * 손가락으로 벌려 페이지가 커지면 배치가 다 어긋난다.
+ * 막는 일은 CSS 의 `touch-action: pan-x pan-y` 가 한다 — 훑어 넘기기만 허용하므로
+ * 핀치도 두 번 두드리기도 확대되지 않는다. 지도와 전장은 `touch-action: none` 이라
+ * 브라우저가 손대지 않고 제 확대 코드가 직접 받는다.
+ *
+ * 아래는 touch-action 을 안 보는 옛 웹킷용 보험이다.
+ * 두 번 두드리기를 자바스크립트로 막는 짓은 하지 않는다 — 멀쩡한 빠른 탭까지 먹는다.
+ */
+for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
+  document.addEventListener(type, (e) => e.preventDefault(), { passive: false });
+}
+
 /* ─────────────────────────── 화면 방향 ───────────────────────────
  *
  * 앱(TWA)으로 설치하면 안드로이드 쪽에서 가로로 못 박지만,

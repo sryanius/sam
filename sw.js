@@ -27,7 +27,7 @@
  * 온라인에서 처음 쓰는 순간 캐시에 들어간다.
  */
 
-const CACHE = 'sam-v3';
+const CACHE = 'sam-v4';
 
 const APP_SHELL = [
   './',
