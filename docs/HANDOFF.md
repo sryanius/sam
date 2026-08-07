@@ -191,11 +191,11 @@ zlib(표준 라이브러리)만으로 IHDR/IDAT/IEND 를 손으로 조립한다.
 | 패키지 | `io.github.sryanius.sam` |
 | 런처 이름 | 삼국지 |
 | 여는 주소 | `https://sryanius.github.io/sam/` |
-| 화면 방향 | `landscape` |
+| 화면 방향 | `sensorLandscape` — 폰의 회전 잠금을 무시하고 가로로 뜬다 |
 | 게임 분류 | `appCategory=0` = `CATEGORY_GAME` (삼성 게이밍 허브 인식용) |
 | 서명 SHA256 | `03:88:4A:6F:8B:8E:…:1E:E6:5E:94` |
 | 크기 | 0.87 MB |
-| 결과물 | `C:\claude\sam-twa\삼국지-1.0.0.apk` |
+| 결과물 | `C:\claude\sam-twa\삼국지-1.0.1.apk` (versionCode 2) |
 
 `assetlinks.json` 은 오리진 루트(`sryanius/sryanius.github.io`)에 있고 **배열**이라
 용병단 항목 뒤에 삼국지 항목을 붙였다. **둘 중 하나를 지우지 마라.**
@@ -248,6 +248,23 @@ UI(무장 상세·전투 후 포로 처분), `captiveAction`, AI 세 곳 모두 
 `city.js` 가 돌아서 "고쳤는데 왜 그대로지?" 를 한참 했다.
 → `main.js` 가 **localhost 에서는 서비스워커를 등록하지 않고, 이미 있으면 벗겨낸다.**
 배포 환경에서만 등록된다. (그래도 배포할 때 `CACHE` 버전은 꼭 올려라.)
+
+## §6.6 배포 절차 — 매번 이 셋을 같이 올려라
+
+> "고쳤는데 폰 화면이 그대로다" 의 원인은 거의 항상 서비스워커 캐시다.
+
+| 고칠 것 | 파일 |
+|---|---|
+| 캐시 버전 | `sw.js` 의 `CACHE` (`sam-v3` → `sam-v4`) |
+| 판 번호 | `src/version.js` 의 `BUILD` — **타이틀 구석에 찍힌다** |
+| 모듈 목록 | 파일을 추가·삭제했으면 `sw.js` 의 `APP_SHELL` (`tools/imports.mjs` 가 검사) |
+
+`main.js` 가 열 때마다 `reg.update()` 로 새 워커를 확인하고, 자리를 잡으면
+`controllerchange` 에서 **스스로 한 번 다시 불러온다**(플래그로 무한 새로고침 방지).
+그래도 안 바뀌면 타이틀의 판 번호를 보면 된다 — 안 올라갔으면 아직 옛 파일이다.
+
+**localhost 에서는 서비스워커를 아예 등록하지 않는다**(이미 있으면 벗겨낸다).
+개발 중에 캐시가 옛 모듈을 먹이는 함정을 한 번 크게 밟아서 그렇게 했다.
 
 ## §7. 다음 세션 작업 순서 (제안)
 
