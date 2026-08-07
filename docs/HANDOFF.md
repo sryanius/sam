@@ -191,11 +191,19 @@ zlib(표준 라이브러리)만으로 IHDR/IDAT/IEND 를 손으로 조립한다.
 | 패키지 | `io.github.sryanius.sam` |
 | 런처 이름 | 삼국지 |
 | 여는 주소 | `https://sryanius.github.io/sam/` |
-| 화면 방향 | `sensorLandscape` — 폰의 회전 잠금을 무시하고 가로로 뜬다 |
+| 화면 방향 | `sensorLandscape` + 메타데이터 `landscape` |
+| 표시 방식 | `DISPLAY_MODE = sticky-immersive` — 상태바·버튼바를 숨긴다 |
 | 게임 분류 | `appCategory=0` = `CATEGORY_GAME` (삼성 게이밍 허브 인식용) |
 | 서명 SHA256 | `03:88:4A:6F:8B:8E:…:1E:E6:5E:94` |
 | 크기 | 0.87 MB |
-| 결과물 | `C:\claude\sam-twa\삼국지-1.0.1.apk` (versionCode 2) |
+| 결과물 | `C:\claude\sam-twa\삼국지-1.0.2.apk` (versionCode 3) |
+
+**TWA 의 내용은 내 액티비티가 아니라 Chrome 이 띄운다.** 이걸 늦게 알았다.
+`LauncherActivity` 에 `screenOrientation` 을 박아도 **스플래시에만** 듣는다
+(bubblewrap 이 생성한 소스의 주석에도 그렇게 적혀 있다).
+본문의 방향·표시 방식은 **메타데이터로 Chrome 에 넘기는 것이 전부**다.
+그래서 웹 쪽에도 같은 뜻을 걸어 둔다 — 매니페스트 `display`/`orientation`,
+그리고 안내 화면의 "가로로 전환" 단추(사람이 누른 직후라 가장 잘 듣는다).
 
 `assetlinks.json` 은 오리진 루트(`sryanius/sryanius.github.io`)에 있고 **배열**이라
 용병단 항목 뒤에 삼국지 항목을 붙였다. **둘 중 하나를 지우지 마라.**
@@ -267,6 +275,23 @@ UI(무장 상세·전투 후 포로 처분), `captiveAction`, AI 세 곳 모두 
 브라우저가 백그라운드 탭의 `setTimeout` 을 1분에 한 번꼴로 조인다.
 `auto()` 가 `await sleep(70)` 으로 도니 화면을 가리면 사실상 멈춘다.
 **버그가 아니다** — 돌아오면 이어서 돈다. 개발 중에 이걸로 한참 헤맸다.
+
+## §6.56 완전 전체화면 (몰입 모드)
+
+> "핸드폰 위아래 여백이 생기고 버튼바가 뜨는데 일반 게임처럼 완전 전체화면은 안 되나"
+
+- `manifest.webmanifest` → `"display": "fullscreen"` (+ `display_override`)
+- TWA → `twa-manifest.json` 의 `"display": "fullscreen"` 이면 bubblewrap 이
+  `DISPLAY_MODE = immersive` 를 내보낸다. **손으로 `sticky-immersive` 로 고친다** —
+  쓸어 올려 막대를 불러도 곧 다시 숨는다. 게임에는 이쪽이 맞다.
+- 화면 끝까지 그리게 되므로 노치·둥근 모서리 대비가 필요하다.
+  가장자리에 닿는 요소만 `env(safe-area-inset-*)` 만큼 안쪽으로 민다
+  (`#topbar #battle-top #cmdbar #side #battle-side #logbar`). 캔버스는 끝까지 채운다.
+
+**여백은 `--px` 변수를 거쳐 `max(원래값, 안전여백)` 으로 잡는다.**
+처음에 고정값으로 썼다가 폰용 압축 패딩(`3px 8px`)까지 덮어써서 상단바가 다시 두꺼워졌다.
+미디어 쿼리마다 `--px` 를 두어 원래 값을 지킨다. **이 규칙은 CSS 맨 끝에 있어야 한다** —
+위의 미디어 쿼리들이 `padding` 을 통째로 다시 쓰기 때문이다.
 
 ## §6.6 배포 절차 — 매번 이 셋을 같이 올려라
 
