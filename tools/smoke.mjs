@@ -2,13 +2,14 @@
 //   node tools/smoke.mjs
 
 import { CITIES, ROUTES, ADJ, DIST } from '../src/data/cities.js';
-import { OFFICERS, OFFICER_BY_NAME, troopType } from '../src/data/officers.js';
+import { OFFICERS, OFFICER_BY_NAME, troopType, officersWithoutTroopType } from '../src/data/officers.js';
 import { SHIPS, SHIP_ORDER, availableShips } from '../src/data/ships.js';
 import { info } from '../src/game/city.js';
 import { HOMETOWN, HOME_OF } from '../src/data/hometowns.js';
 import { SCENARIOS } from '../src/data/scenarios.js';
 import { TREASURES } from '../src/data/treasures.js';
-import { newGame, factionCities, factionOfficers, NEUTRAL, base, isRulerOf } from '../src/game/state.js';
+import { newGame, factionCities, factionOfficers, NEUTRAL, base, isRulerOf, serialize, deserialize } from '../src/game/state.js';
+import { eff } from '../src/game/officer.js';
 import { captiveAction } from '../src/game/commands.js';
 import { endMonth, beginMonth, rankings } from '../src/game/turn.js';
 import { startBattle, resolveBattle } from '../src/game/battle/engine.js';
@@ -159,7 +160,11 @@ section('전투 자동 판정');
 
 section('병종 고정 · 배');
 {
-  // 1) 모든 무장이 셋 중 하나로 떨어지고, 세 병종이 골고루 나온다
+  // 1) 병종은 데이터로 못 박혀 있어야 한다 — 규칙으로 추측하지 않는다
+  const missing = officersWithoutTroopType();
+  ok(!missing.length,
+     `병종 태그가 없는 무장 ${missing.length}명: ${missing.slice(0, 8).map((o) => o.name).join(', ')}`);
+
   const count = { 보병: 0, 기병: 0, 궁병: 0 };
   for (const o of OFFICERS) {
     const t = troopType(o);
@@ -167,7 +172,17 @@ section('병종 고정 · 배');
     if (count[t] !== undefined) count[t]++;
     ok(troopType(o) === t, `${o.name}: 병종이 부를 때마다 달라진다`);
   }
-  for (const k of Object.keys(count)) ok(count[k] >= 40, `${k}이(가) 너무 적다 (${count[k]}명)`);
+  // 한쪽으로 쏠리지 않아야 한다 (예전 규칙은 강한 무장을 죄다 기병으로 몰았다)
+  for (const k of Object.keys(count)) {
+    ok(count[k] >= OFFICERS.length * 0.22, `${k}이(가) 너무 적다 (${count[k]}명)`);
+    ok(count[k] <= OFFICERS.length * 0.45, `${k}이(가) 너무 많다 (${count[k]}명)`);
+  }
+  // 열전에 근거가 뚜렷한 몇을 못 박아 확인한다
+  for (const [n, t] of [['관우', '기병'], ['여포', '기병'], ['마초', '기병'],
+                        ['황충', '궁병'], ['하후연', '궁병'], ['제갈량', '궁병'],
+                        ['전위', '보병'], ['허저', '보병'], ['고순', '보병']]) {
+    ok(troopType(OFFICER_BY_NAME[n]) === t, `${n}은(는) ${t}이어야 한다 (지금 ${troopType(OFFICER_BY_NAME[n])})`);
+  }
   console.log(`  병종 분포 — 보병 ${count.보병} / 기병 ${count.기병} / 궁병 ${count.궁병}`);
   // 태그로 못 박은 예외가 지켜지는가
   ok(troopType(OFFICER_BY_NAME['황충']) === '궁병', '황충은 궁병이어야 한다');
@@ -212,6 +227,44 @@ section('병종 고정 · 배');
   }
   ok(checkedWater, '수로 전투를 한 번도 못 만들었다');
   ok(checkedLand, '육로 전투를 한 번도 못 만들었다');
+}
+
+section('해마다 자라기');
+{
+  // 눈금: 무장 하나가 10년에 5쯤. 처음부터 끝까지 살아남은 자로만 잰다.
+  const st = newGame('194', 0, 2468);
+  const started = new Set(st.officers.map((s) => s.id));
+  beginMonth(st);
+  for (let m = 0; m < 120; m++) {
+    let r = endMonth(st), guard = 0;
+    while (r.interrupted && guard++ < 20) {
+      autoResolve(st.battle); resolveBattle(st, st.battle); st.battle = null; r = endMonth(st);
+    }
+    if (st.over) break;
+  }
+  const alive = st.officers.filter((s) => started.has(s.id));
+  const total = (s) => Object.values(s.growth || {}).reduce((a, b) => a + b, 0);
+  const avg = alive.reduce((a, s) => a + total(s), 0) / Math.max(1, alive.length);
+  ok(avg >= 3.5 && avg <= 7, `10년 평균 성장이 ${avg.toFixed(2)} — 5 언저리여야 한다`);
+
+  const young = alive.filter((s) => 194 - base(s).born < 30);
+  const old = alive.filter((s) => 194 - base(s).born >= 50);
+  const mean = (a) => a.reduce((x, s) => x + total(s), 0) / Math.max(1, a.length);
+  ok(mean(young) > mean(old), '젊은 무장이 늙은 무장보다 더디게 자란다');
+
+  // 상한을 넘지 않는가
+  for (const s of st.officers) {
+    const e = eff(s);
+    for (const k of ['lead', 'navy', 'war', 'int', 'pol', 'cha']) {
+      ok(e[k] >= 1 && e[k] <= 100, `${base(s).name}: ${k} 가 범위를 벗어났다 (${e[k]})`);
+    }
+  }
+  // 세이브를 거쳐도 자란 값이 남는가
+  const before = alive.map((s) => total(s));
+  const round = deserialize(serialize(st));
+  const after = round.officers.filter((s) => started.has(s.id)).map((s) => total(s));
+  ok(JSON.stringify(before) === JSON.stringify(after), '세이브를 거치면 자란 값이 사라진다');
+  console.log(`  10년 평균 +${avg.toFixed(2)} (30세 미만 +${mean(young).toFixed(2)} / 50세 이상 +${mean(old).toFixed(2)})`);
 }
 
 section('군주 포로 처분');

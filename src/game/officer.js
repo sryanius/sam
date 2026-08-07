@@ -9,22 +9,64 @@ import { TREASURES, treasureBonus } from '../data/treasures.js';
 export const age = (o, year) => year - o.born;
 
 /**
- * 보물 보정까지 얹은 실제 능력치. 전투·내정·판정은 전부 이 값을 쓴다.
- * s 는 무장 상태(state.officers 의 원소).
+ * 실제 능력치 = 타고난 값 + **자란 값** + 보물 보정.
+ * 전투·내정·판정은 전부 이 값을 쓴다. s 는 무장 상태(state.officers 의 원소).
  */
 export function eff(s) {
   const o = base(s);
   const b = treasureBonus(s.treasures);
+  const g = s.growth || EMPTY_GROWTH;
+  const v = (k) => clamp(o[k] + (g[k] || 0) + b[k], 1, 100);
   return {
     ...o,
-    lead: clamp(o.lead + b.lead, 1, 100),
-    navy: clamp(o.navy + b.navy, 1, 100),
-    war:  clamp(o.war  + b.war,  1, 100),
-    int:  clamp(o.int  + b.int,  1, 100),
-    pol:  clamp(o.pol  + b.pol,  1, 100),
-    cha:  clamp(o.cha  + b.cha,  1, 100),
+    lead: v('lead'), navy: v('navy'), war: v('war'),
+    int: v('int'), pol: v('pol'), cha: v('cha'),
     mount: b.mount > 0,
   };
+}
+
+const EMPTY_GROWTH = Object.freeze({});
+export const GROWABLE = ['lead', 'navy', 'war', 'int', 'pol', 'cha'];
+export const STAT_NAME = { lead: '육지', navy: '수지', war: '무력', int: '지력', pol: '정치', cha: '매력' };
+
+/** 타고난 값 + 자란 값 (보물 제외) — 성장 판정에 쓴다 */
+const grown = (s, k) => base(s)[k] + ((s.growth || EMPTY_GROWTH)[k] || 0);
+
+/**
+ * 해가 바뀔 때의 성장. 매년 1월에 한 번 돈다.
+ *
+ * 눈금: **무장 하나가 10년에 능력 5쯤** 오르게 잡았다 — 해마다 0.5.
+ * 한 번 오를 때 1씩 올리므로 성장 확률의 평균이 0.5여야 한다.
+ * 젊을수록 잘 자라고 늙으면 더디다. 아래 나이별 확률의 평균이 대략 0.5가 된다.
+ *
+ * 이미 100인 항목은 건너뛴다. 타고난 값이 낮은 항목이 조금 더 잘 오른다 —
+ * 못 하는 것을 익히는 편이 자연스럽고, 강한 무장만 계속 강해지는 것도 막는다.
+ */
+export function annualGrowth(st, rng) {
+  const grew = [];
+  for (const s of st.officers) {
+    if (s.status !== 'normal') continue;
+    const o = base(s);
+    const age = st.year - o.born;
+    const p = age < 25 ? 0.85 : age < 35 ? 0.62 : age < 45 ? 0.42 : age < 55 ? 0.26 : 0.12;
+    if (!rng.chance(p)) continue;
+
+    // 오를 수 있는 항목 중에서 고른다. 낮은 항목에 가중치를 준다.
+    const pool = [];
+    for (const k of GROWABLE) {
+      const cur = grown(s, k);
+      if (cur >= 100) continue;
+      const w = 1 + Math.floor((100 - cur) / 25);   // 1~4
+      for (let i = 0; i < w; i++) pool.push(k);
+    }
+    if (!pool.length) continue;
+
+    const k = rng.pick(pool);
+    if (!s.growth) s.growth = {};
+    s.growth[k] = (s.growth[k] || 0) + 1;
+    grew.push({ state: s, officer: o, stat: k, to: grown(s, k) });
+  }
+  return grew;
 }
 
 /** 은자·방사·의원은 벼슬에 뜻이 없다 */

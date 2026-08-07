@@ -180,9 +180,14 @@ export async function officerDialog(st, s, ctx) {
   const tbl = el('table', { class: 'grid', style: { marginTop: '8px', maxWidth: '360px' } });
   const trow = (a, b, c2, d) => tbl.append(el('tr', {},
     el('td', {}, a), el('td', { class: 'n' }, b), el('td', {}, c2), el('td', { class: 'n' }, d)));
-  trow('육지', `${e.lead} ${grade(e.lead)}`, '수지', `${e.navy} ${grade(e.navy)}`);
-  trow('무력', `${e.war} ${grade(e.war)}`, '지력', `${e.int} ${grade(e.int)}`);
-  trow('정치', `${e.pol} ${grade(e.pol)}`, '매력', `${e.cha} ${grade(e.cha)}`);
+  // 해마다 자란 만큼을 옆에 보인다 — 어느 무장이 크고 있는지 알아야 키울 맛이 난다
+  const stat = (k, label) => {
+    const g = (s.growth || {})[k] || 0;
+    return `${e[k]} ${grade(e[k])}${g ? `  +${g}` : ''}`;
+  };
+  trow('육지', stat('lead'), '수지', stat('navy'));
+  trow('무력', stat('war'), '지력', stat('int'));
+  trow('정치', stat('pol'), '매력', stat('cha'));
   trow('야망', o.amb, '의리', o.duty);
   trow('충성', s.faction === NEUTRAL ? '—' : Math.round(s.loyalty),
        '상성', ruler ? `${affinityGap(o.comp, ruler.comp)} (군주와)` : o.comp);

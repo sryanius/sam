@@ -15,7 +15,7 @@ import {
   base, NEUTRAL, officerState, factionCities, factionOfficers, power,
 } from './state.js';
 import { monthlyUpdate, info } from './city.js';
-import { loyaltyDrift, defectionCheck, debutOfficers, ageDeaths } from './officer.js';
+import { loyaltyDrift, defectionCheck, debutOfficers, ageDeaths, annualGrowth, STAT_NAME } from './officer.js';
 import { killOfficer, succeed } from './commands.js';
 import { runFactionAI } from './ai.js';
 
@@ -84,6 +84,15 @@ export function endMonth(st) {
       const where = s ? info(st.cities[s.city]).name : '';
       rep.push(`${where}에 ${iga(o.name)} 세상에 나왔다.`);
     }
+
+    // 해가 바뀌면 무장이 자란다. 400명이 자라니 전부 알리면 보고가 넘친다 —
+    // **우리 무장만**, 그것도 몇 줄로 줄여 보여준다.
+    const grew = annualGrowth(st, rng);
+    const mine = grew.filter((g) => g.state.faction === st.player);
+    for (const g of mine.slice(0, 5)) {
+      rep.push(`${iga(g.officer.name)} ${iga(STAT_NAME[g.stat])} 늘었다. (${g.to})`);
+    }
+    if (mine.length > 5) rep.push(`그 밖에 ${mine.length - 5}명이 한 뼘씩 자랐다.`);
   }
 
   // 5) 화친·동맹 만료, 멸망 판정
